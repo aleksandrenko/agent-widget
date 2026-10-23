@@ -615,6 +615,7 @@ struct Footer: View {
             HStack(spacing: 14) {
                 if stats.e2e != nil || errors["e2e"] != nil { e2e }
                 counter(icon: "arrow.triangle.pull", counts: stats.prs, title: "Твоите PR-и", error: errors["prCounts"])
+                if stats.jira != nil { jiraCounter }  // appears once Jira answers (needs the API token)
                 Spacer(minLength: 0)
                 calendar(context.date)
             }
@@ -660,6 +661,20 @@ struct Footer: View {
         if state.running > 0 { lines.append("\(state.running) вървят в момента") }
         lines.append(state.running > 0 ? "клик → текущият run" : "клик → последният run")
         return lines.joined(separator: "\n")
+    }
+
+    /// Open / Done this month, like the PR counter.
+    private var jiraCounter: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "ticket")
+            if let jira = stats.jira {
+                Text("\(jira.open)") + Text("/\(jira.month)").foregroundColor(.white.opacity(0.45))
+            } else {
+                Text("–")
+            }
+        }
+        .hoverTip("Твоите Jira тикети",
+                  stats.jira.map { "\($0.open) отворени · \($0.month) Done този месец" } ?? errors["jira"])
     }
 
     private func counter(icon: String, counts: Snapshot.Counts?, title: String, error: String?) -> some View {
