@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private var collecting = false
     private var pinWatch: AnyCancellable?
+    private var statusItem: NSStatusItem?
+    private var peeking = false
+    private var clickOutside: Any?
 
     static func main() {
         let app = NSApplication.shared
@@ -56,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         Snapshot.load().map(show)
+        addStatusItem()
         try? SMAppService.mainApp.register()
         NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -99,6 +103,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func show(_ snapshot: Snapshot) {
         if let accent = Palette.hex(snapshot.brand?.accent) { Palette.accent = accent }
         store.snapshot = snapshot
+    }
+
+    // MARK: Menu bar item
+
+    /// Click: bring the panel above every window until the next click elsewhere. Right click: a menu.
+    private func addStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let image = Header.mark.map { mark -> NSImage in
+            let copy = mark.copy() as! NSImage
+            copy.size = NSSize(width: 12, height: 16)
+            return copy
+        } ?? NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Agent Widget")
+        image?.isTemplate = true
+        item.button?.image = image
+        item.button?.toolTip = "Agent Widget"
+        item.button?.target = self
+        item.button?.action = #selector(statusItemClicked)
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        statusItem = item
+    }
+
+    @objc private func statusItemClicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            showMenu()
+        } else {
+            peeking ? endPeek() : peek()
+        }
+    }
+
+    private func peek() {
+        bringOnScreen()
+        guard !store.pinned else { return panel.orderFrontRegardless() }
+        peeking = true
+        panel.pin(true)
+        clickOutside = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.endPeek() }
+        }
+    }
+
+    private func endPeek() {
+        if let monitor = clickOutside { NSEvent.removeMonitor(monitor) }
+        clickOutside = nil
+        guard peeking else { return }
+        peeking = false
+        panel.pin(store.pinned)
+    }
+
+    /// Back onto a screen if the panel was left on a display that's gone.
+    private func bringOnScreen(force: Bool = false) {
+        guard force || !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(panel.frame) }) else { return }
+        let screen = (NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main)?.visibleFrame ?? .zero
+        panel.setFrameTopLeftPoint(NSPoint(x: screen.minX + 16, y: screen.maxY - 12))
+    }
+
+    private func showMenu() {
+        let menu = NSMenu()
+        let pin = NSMenuItem(title: "Закачи над всички прозорци", action: #selector(togglePin), keyEquivalent: "")
+        pin.state = store.pinned ? .on : .off
+        [pin,
+         NSMenuItem(title: "Обнови сега", action: #selector(refreshNow), keyEquivalent: ""),
+         NSMenuItem(title: "Премести на този екран", action: #selector(moveHere), keyEquivalent: ""),
+         .separator(),
+         NSMenuItem(title: "Изход", action: #selector(quit), keyEquivalent: "")].forEach { item in
+            item.target = self
+            menu.addItem(item)
+        }
+        statusItem?.menu = menu
+        statusItem?.button?.performClick(nil)  // opens the menu under the icon
+        statusItem?.menu = nil  // so the next left click peeks again
+    }
+
+    @objc private func togglePin() {
+        endPeek()
+        store.pinned.toggle()
+    }
+
+    @objc private func refreshNow() {
+        collect()
+        meetings.reload()
+    }
+
+    @objc private func moveHere() {
+        bringOnScreen(force: true)
+        panel.orderFrontRegardless()
+    }
+
+    @objc private func quit() {
+        NSApp.terminate(nil)
     }
 
     private func savedTopLeft() -> NSPoint {

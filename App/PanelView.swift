@@ -167,7 +167,7 @@ struct Header: View {
                 .foregroundStyle(.white)
                 .padding(.leading, 7)
             Spacer(minLength: 8)
-            (Text(Image(systemName: "person.fill")).font(.system(size: 10)).baselineOffset(2.5) + Text(" " + (Demo.isOn ? "Jamie Rivera" : NSFullUserName())).font(.system(size: 12)))
+            (Text(Image(systemName: "person.fill")).font(.system(size: 10)).baselineOffset(1.5) + Text(" " + (Demo.isOn ? "Jamie Rivera" : NSFullUserName())).font(.system(size: 12)))
                 .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
             Image(systemName: pinned ? "pin.fill" : "pin")

@@ -42,8 +42,10 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 - **Calendar**: today's meeting count. Ten minutes before a meeting it turns into an orange `3 · 4 мин` pill; during a meeting it turns into a red `3 · в среща` pill. Click it to join the call.
 - **Week bar**: the panel's bottom edge fills in your accent colour from Monday 09:00 to Friday 18:00. Hover it for the day and the week's progress.
 
-### Pin
-The pin in the header moves the panel above every window, including full-screen apps. Click it again to send the panel back to the desktop. Drag the panel from anywhere to move it, and drag its right edge to make it wider for long titles (up to twice the default width); it remembers both.
+### Pin and the menu bar icon
+The pin in the header moves the panel above every window, including full-screen apps. Click it again to send the panel back to the desktop.
+
+The ✨ (or your brand mark) in the menu bar brings the panel back when windows cover it: click it and the panel jumps above everything until your next click elsewhere. Right-click it for **Pin above all windows**, **Refresh now**, **Move to this screen** (when the panel was left on a display that's gone) and **Quit**. Drag the panel from anywhere to move it, and drag its right edge to make it wider for long titles (up to twice the default width); it remembers both.
 
 ---
 

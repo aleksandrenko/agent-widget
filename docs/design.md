@@ -13,6 +13,9 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 
 - Pin in the header (right of the name): pinned floats above every window (green pin), unpinned sits on the desktop.
 
+## Menu bar
+- Template icon (brand mark or ✨). Click: panel above all windows until the next click elsewhere. Right-click: pin, refresh now, move to this screen, quit.
+
 ## Task row (one list, hairline separators, light hover on the whole row)
 - 32 pt status square, icon only, glossy: light-to-dark gradient, light top edge, glow in its colour.
   Blue sparkles (stars light up in turn) working, orange waving hand (±18°) waits for me, green check done, slate moon no agent.
