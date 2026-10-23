@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Menu bar item
 
-    /// The ticket in the menu bar: outlined while the panel is open, filled while it is closed.
+    /// The binoculars in the menu bar: clear lenses while the panel is open, covered while it is closed.
     /// Any click opens a menu to open or close the panel, with a short summary.
     private func addStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -122,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hiddenWatch = store.$hidden.sink { [weak self] hidden in
             guard let self else { return }
-            statusItem?.button?.image = Self.menuBarIcon(filled: hidden)
+            statusItem?.button?.image = Self.menuBarIcon(lids: hidden ? 1 : 0)
             self.updateBlink()
             if hidden {
                 panel.orderOut(nil)
@@ -137,58 +137,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// A ticket: a rounded shape with a notch on each side and a dashed tear line, 18 × 13 pt like the
-    /// keyboard-language icon. A template, so macOS tints it like the other menu bar icons.
-    /// `open`: how far the eye is open, 1 = open, 0 = shut (for the blink).
-    private static func menuBarIcon(filled: Bool, open: CGFloat = 1) -> NSImage {
-        let image = NSImage(size: NSSize(width: 20, height: 16), flipped: false) { rect in
-            let r = rect.insetBy(dx: 1, dy: 1.5)
-            let corner: CGFloat = 2.5, notch: CGFloat = 2.4
-            let ticket = NSBezierPath()
-            ticket.move(to: NSPoint(x: r.minX + corner, y: r.minY))
-            ticket.line(to: NSPoint(x: r.maxX - corner, y: r.minY))
-            ticket.appendArc(withCenter: NSPoint(x: r.maxX - corner, y: r.minY + corner), radius: corner, startAngle: 270, endAngle: 360)
-            ticket.line(to: NSPoint(x: r.maxX, y: r.midY - notch))
-            ticket.appendArc(withCenter: NSPoint(x: r.maxX, y: r.midY), radius: notch, startAngle: 270, endAngle: 90, clockwise: true)
-            ticket.line(to: NSPoint(x: r.maxX, y: r.maxY - corner))
-            ticket.appendArc(withCenter: NSPoint(x: r.maxX - corner, y: r.maxY - corner), radius: corner, startAngle: 0, endAngle: 90)
-            ticket.line(to: NSPoint(x: r.minX + corner, y: r.maxY))
-            ticket.appendArc(withCenter: NSPoint(x: r.minX + corner, y: r.maxY - corner), radius: corner, startAngle: 90, endAngle: 180)
-            ticket.line(to: NSPoint(x: r.minX, y: r.midY + notch))
-            ticket.appendArc(withCenter: NSPoint(x: r.minX, y: r.midY), radius: notch, startAngle: 90, endAngle: 270, clockwise: true)
-            ticket.line(to: NSPoint(x: r.minX, y: r.minY + corner))
-            ticket.appendArc(withCenter: NSPoint(x: r.minX + corner, y: r.minY + corner), radius: corner, startAngle: 180, endAngle: 270)
-            ticket.close()
-            ticket.lineWidth = 1.5
-            ticket.lineJoinStyle = .round
+    /// Minimal binoculars, as in the app icon: two rings, a bridge and two eyepiece ticks.
+    /// `lids`: how far the lenses are covered from the top, 0 = clear, 1 = covered. Open panel = clear
+    /// lenses, closed panel = covered ("eyes shut"); a blink sweeps the lids across. A template, so macOS
+    /// tints it like the other menu bar icons.
+    private static func menuBarIcon(lids: CGFloat) -> NSImage {
+        let image = NSImage(size: NSSize(width: 22, height: 16), flipped: false) { rect in
+            // The icon's 64-unit grid (y down), fitted to the menu bar height.
+            let u: CGFloat = 0.4
+            let p = { (x: CGFloat, y: CGFloat) in NSPoint(x: rect.midX + (x - 32) * u, y: rect.midY + (33 - y) * u) }
             NSColor.black.set()
-            filled ? ticket.fill() : ticket.stroke()
-            // A small eye on the right (BirdWatcher), cut out of the filled ticket. The lids close towards
-            // the middle as `open` goes to 0.
-            let eye = NSRect(x: r.minX + r.width * 0.6 - 3.4, y: r.midY - 2.1, width: 6.8, height: 4.2)
-            let lid = (eye.height / 2 + 0.8) * max(open, 0.08)
-            let almond = NSBezierPath()
-            almond.move(to: NSPoint(x: eye.minX, y: eye.midY))
-            almond.curve(to: NSPoint(x: eye.maxX, y: eye.midY), controlPoint1: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.midY + lid),
-                         controlPoint2: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.midY + lid))
-            almond.curve(to: NSPoint(x: eye.minX, y: eye.midY), controlPoint1: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.midY - lid),
-                         controlPoint2: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.midY - lid))
-            almond.close()
-            almond.lineWidth = 1.2
-            let pupil = NSBezierPath(ovalIn: NSRect(x: eye.midX - 1.1, y: eye.midY - 1.1, width: 2.2, height: 2.2))
-            if filled {
-                NSGraphicsContext.current?.compositingOperation = .destinationOut
-                almond.fill()
-                NSGraphicsContext.current?.compositingOperation = .sourceOver
-            } else {
-                almond.stroke()
+            for cx: CGFloat in [19, 45] {
+                let c = p(cx, 38)
+                let lens = NSRect(x: c.x - 11 * u, y: c.y - 11 * u, width: 22 * u, height: 22 * u)
+                let ring = NSBezierPath(ovalIn: lens.insetBy(dx: 0.8, dy: 0.8))
+                ring.lineWidth = 1.6
+                ring.stroke()
+                if lids > 0 {
+                    NSGraphicsContext.saveGraphicsState()
+                    ring.addClip()
+                    NSRect(x: lens.minX, y: lens.maxY - lens.height * lids, width: lens.width, height: lens.height * lids).fill()
+                    NSGraphicsContext.restoreGraphicsState()
+                }
             }
-            if open > 0.3 {  // the pupil shows only between the lids
-                NSGraphicsContext.saveGraphicsState()
-                almond.addClip()
-                pupil.fill()
-                NSGraphicsContext.restoreGraphicsState()
-            }
+            let lines = NSBezierPath()
+            lines.move(to: p(29.5, 34)); lines.line(to: p(34.5, 34))
+            lines.move(to: p(14, 22)); lines.line(to: p(17, 16))
+            lines.move(to: p(50, 22)); lines.line(to: p(47, 16))
+            lines.lineWidth = 1.6
+            lines.lineCapStyle = .round
+            lines.stroke()
             return true
         }
         image.isTemplate = true
@@ -212,7 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard wantsAttention else {
             blinkTimer?.invalidate()
             blinkTimer = nil
-            statusItem?.button?.image = Self.menuBarIcon(filled: store.hidden)
+            statusItem?.button?.image = Self.menuBarIcon(lids: store.hidden ? 1 : 0)
             return
         }
         guard blinkTimer == nil else { return }
@@ -222,12 +200,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The lids sweep across the lenses and back: shut-and-open while the panel is open,
+    /// open-and-shut while it is closed.
     private func blink() {
-        let frames: [CGFloat] = [0.6, 0.2, 0, 0.2, 0.6, 1]
-        for (i, open) in frames.enumerated() {
+        let frames: [CGFloat] = [0.35, 0.7, 1, 0.7, 0.35, 0]
+        for (i, sweep) in frames.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.06 * Double(i)) { [weak self] in
                 guard let self else { return }
-                statusItem?.button?.image = Self.menuBarIcon(filled: store.hidden, open: open)
+                statusItem?.button?.image = Self.menuBarIcon(lids: store.hidden ? 1 - sweep : sweep)
             }
         }
     }
