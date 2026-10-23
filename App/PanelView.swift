@@ -615,7 +615,7 @@ struct Footer: View {
             HStack(spacing: 14) {
                 if stats.e2e != nil || errors["e2e"] != nil { e2e }
                 counter(icon: "arrow.triangle.pull", counts: stats.prs, title: "Твоите PR-и", error: errors["prCounts"])
-                if stats.jira != nil { jiraCounter }  // hidden until Jira answers
+                jiraCounter
                 Spacer(minLength: 0)
                 calendar(context.date)
             }

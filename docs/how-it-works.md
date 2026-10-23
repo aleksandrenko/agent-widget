@@ -47,7 +47,7 @@ The stage of a task is the stage of its least advanced live PR.
 ## Footer
 - **e2e**: the workflow set in `config.json` → `e2e` (`repo`, `workflow`, and `titlePrefix` to pick one kind of run, e.g. the full-suite gate of release builds). Green or red by the last finished run; the clock blinks while one is running. The tooltip shows how many of the last 10 passed; a click opens the running run, or the last one.
 - **PRs**: GitHub search, `author:@me created:>=` the week's Monday / the month's 1st.
-- **Tickets**: Jira: your open tickets (anything not in Jira's *Done* category, so *On staging* counts as open) / tickets that reached *Done* this month. Hidden when Jira isn't set up.
+- **Tickets**: Jira: your open tickets (anything not in Jira's *Done* category, so *On staging* counts as open) / tickets that reached *Done* this month. Shows `–` when Jira isn't set up or the token has expired; the tooltip says which.
 - **Meetings**: today's events with attendees that are not all-day, not *free*, and not declined by you. The call link is the event URL, or the first Meet / Zoom / Teams link in its location or notes.
 
 ## Slack
