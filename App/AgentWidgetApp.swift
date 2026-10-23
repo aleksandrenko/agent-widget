@@ -118,24 +118,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    /// A mini panel: a rounded frame with the brand mark (or ✨) on top and two task rows, each a status
-    /// square and a text line. A template, so macOS tints it like the other menu bar icons.
+    /// A ticket: a rounded outline with a notch on each side and a dashed tear line.
+    /// A template, so macOS tints it like the other menu bar icons.
     private static func menuBarIcon() -> NSImage {
-        let image = NSImage(size: NSSize(width: 26, height: 16), flipped: false) { rect in
+        // About the size of the keyboard-language icon next to it: an 18 × 13 pt ticket.
+        let image = NSImage(size: NSSize(width: 20, height: 16), flipped: false) { rect in
+            let r = rect.insetBy(dx: 1, dy: 1.5)
+            let corner: CGFloat = 2.5, notch: CGFloat = 2.4
+            let ticket = NSBezierPath()
+            ticket.move(to: NSPoint(x: r.minX + corner, y: r.minY))
+            ticket.line(to: NSPoint(x: r.maxX - corner, y: r.minY))
+            ticket.appendArc(withCenter: NSPoint(x: r.maxX - corner, y: r.minY + corner), radius: corner, startAngle: 270, endAngle: 360)
+            ticket.line(to: NSPoint(x: r.maxX, y: r.midY - notch))
+            ticket.appendArc(withCenter: NSPoint(x: r.maxX, y: r.midY), radius: notch, startAngle: 270, endAngle: 90, clockwise: true)
+            ticket.line(to: NSPoint(x: r.maxX, y: r.maxY - corner))
+            ticket.appendArc(withCenter: NSPoint(x: r.maxX - corner, y: r.maxY - corner), radius: corner, startAngle: 0, endAngle: 90)
+            ticket.line(to: NSPoint(x: r.minX + corner, y: r.maxY))
+            ticket.appendArc(withCenter: NSPoint(x: r.minX + corner, y: r.maxY - corner), radius: corner, startAngle: 90, endAngle: 180)
+            ticket.line(to: NSPoint(x: r.minX, y: r.midY + notch))
+            ticket.appendArc(withCenter: NSPoint(x: r.minX, y: r.midY), radius: notch, startAngle: 90, endAngle: 270, clockwise: true)
+            ticket.line(to: NSPoint(x: r.minX, y: r.minY + corner))
+            ticket.appendArc(withCenter: NSPoint(x: r.minX + corner, y: r.minY + corner), radius: corner, startAngle: 180, endAngle: 270)
+            ticket.close()
+            ticket.lineWidth = 1.5
+            ticket.lineJoinStyle = .round
             NSColor.black.set()
-            let frame = NSBezierPath(roundedRect: rect.insetBy(dx: 0.7, dy: 0.7), xRadius: 3.5, yRadius: 3.5)
-            frame.lineWidth = 1.4
-            frame.stroke()
-            if let mark = Header.mark ?? NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil) {
-                let height: CGFloat = 4.6
-                mark.isTemplate = true
-                mark.draw(in: NSRect(x: 3.6, y: 9.6, width: height * mark.size.width / max(mark.size.height, 1), height: height),
-                          from: .zero, operation: .sourceOver, fraction: 1)
-            }
-            for y: CGFloat in [6.2, 2.8] {
-                NSBezierPath(roundedRect: NSRect(x: 3.6, y: y, width: 2.6, height: 2.6), xRadius: 0.7, yRadius: 0.7).fill()
-                NSBezierPath(roundedRect: NSRect(x: 7.6, y: y + 0.7, width: 14.4, height: 1.2), xRadius: 0.6, yRadius: 0.6).fill()
-            }
+            ticket.stroke()
+            let tear = NSBezierPath()
+            tear.move(to: NSPoint(x: r.minX + r.width * 0.62, y: r.minY + 3))
+            tear.line(to: NSPoint(x: r.minX + r.width * 0.62, y: r.maxY - 3))  // 7 pt: dash, gap, dash
+            tear.lineWidth = 1.5
+            tear.setLineDash([2.5, 2], count: 2, phase: 0)
+            tear.stroke()
             return true
         }
         image.isTemplate = true
