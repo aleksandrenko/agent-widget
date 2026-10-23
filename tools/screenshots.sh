@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR=/Library/Developer/CommandLineTools
-BIN="$HOME/Applications/Agent Widget.app/Contents/MacOS/AgentWidget"
+BIN=$(ls -d /Applications/BirdWatcher.app ~/Applications/BirdWatcher.app 2>/dev/null | head -1)/Contents/MacOS/BirdWatcher
 [ -x "$BIN" ] || ./build.sh
 TMP=$(mktemp -d)
 for demo in docs/demo/*/; do

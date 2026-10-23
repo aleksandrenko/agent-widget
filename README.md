@@ -1,8 +1,8 @@
-# Agent Widget
+# BirdWatcher
 
 **Everything your AI agents and your tickets are doing, on one glass panel on your Mac desktop.**
 
-Agent Widget sits on your wallpaper (or, pinned, above every window) and answers one question at a glance: *what needs me right now?* It joins your Claude Code sessions, your pull requests, your Jira tickets, your Slack, your e2e runs and your calendar into one short list, one row per task.
+BirdWatcher sits on your wallpaper (or, pinned, above every window) and answers one question at a glance: *what needs me right now?* It joins your Claude Code sessions, your pull requests, your Jira tickets, your Slack, your e2e runs and your calendar into one short list, one row per task.
 
 <p align="center">
   <img src="docs/screenshots/default.png" width="420" alt="Agent Widget on the desktop: six tasks, two Slack messages, the footer and a meeting in 4 minutes">
@@ -84,7 +84,7 @@ mkdir -p ~/.agent-widget && cp ~/agent-widget/config.example.json ~/.agent-widge
 ~/agent-widget/build.sh
 ```
 
-`build.sh` compiles the app with the Command Line Tools (no Xcode project and no Xcode licence needed), installs it to `~/Applications/Agent Widget.app`, starts it, and registers it to start at login.
+`build.sh` compiles the app with the Command Line Tools (no Xcode project and no Xcode licence needed), installs it to `/Applications/BirdWatcher.app` (or `~/Applications` if that isn't writable), puts an icon on your Desktop, starts it, and registers it to start at login. If you stop it from the menu, start it again from Spotlight, Apps or the Desktop icon; opening it while it runs shows the panel.
 
 > The app runs the collector from `~/agent-widget/collector/collect.py`, so keep the clone at `~/agent-widget`.
 
@@ -138,7 +138,7 @@ open -g "agentwidget://refresh"                 # collect now
 open -g "agentwidget://snapshot"                # write the live panel to ~/.agent-widget/panel.png
 ```
 
-**Demo mode**: `"Agent Widget.app/Contents/MacOS/AgentWidget" --demo docs/demo/default` shows sample data and touches nothing else: no collector, no login item, no saved position. Add `--snapshot out.png` to write a picture of the panel and quit. The README screenshots are made this way, so they never show real work.
+**Demo mode**: `/Applications/BirdWatcher.app/Contents/MacOS/BirdWatcher --demo docs/demo/default` shows sample data and touches nothing else: no collector, no login item, no saved position. Add `--snapshot out.png` to write a picture of the panel and quit. The README screenshots are made this way, so they never show real work.
 
 ### Layout
 ```
@@ -146,7 +146,7 @@ App/                 SwiftUI app: panel, tooltips, calendar, demo mode
   Resources/         Jira and GitHub marks (SVG)
 collector/           collect.py and its test cases
 docs/                design spec, how it works, demo data, screenshots
-tools/               screenshot compositor
+tools/               screenshot compositor, app icon (icon.swift → App/AppIcon.icns)
 build.sh             build, install, start
 config.example.json  settings template for ~/.agent-widget/config.json
 setup-jira-token.sh  Jira token to the keychain

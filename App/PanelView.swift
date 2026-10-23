@@ -20,6 +20,11 @@ final class Store: ObservableObject {
         didSet { UserDefaults.standard.set(hidden, forKey: Self.hiddenKey) }
     }
     static let hiddenKey = "panelHidden"
+    /// Closed (not just hidden): no updates until it's opened again.
+    @Published var paused = !Demo.isOn && UserDefaults.standard.bool(forKey: pausedKey) {
+        didSet { UserDefaults.standard.set(paused, forKey: Self.pausedKey) }
+    }
+    static let pausedKey = "updatesPaused"
 }
 
 // MARK: - Palette
@@ -87,10 +92,12 @@ struct PanelView: View {
     @ObservedObject var meetings: Meetings
     var open: (String) -> Void
     var resized: (CGSize) -> Void
+    var refresh: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 0) {
-            Header(brand: store.snapshot?.brand, pinned: $store.pinned, hidden: $store.hidden)
+            Header(brand: store.snapshot?.brand, pinned: $store.pinned, close: { store.paused = true; store.hidden = true },
+                   refresh: refresh)
             if let snapshot = store.snapshot {
                 VStack(spacing: 0) {
                     ForEach(Array(snapshot.tasks.enumerated()), id: \.element.id) { index, task in
@@ -152,7 +159,8 @@ struct PanelView: View {
 struct Header: View {
     var brand: Snapshot.Brand?
     @Binding var pinned: Bool
-    @Binding var hidden: Bool
+    var close: () -> Void
+    var refresh: () -> Void
     @State private var pinHovered = false
     @State private var closeHovered = false
 
@@ -160,6 +168,8 @@ struct Header: View {
         // One 22 pt row, everything centred on it. The P lines up with the status squares below
         // and the pin with the GitHub icons.
         HStack(spacing: 0) {
+          // Everything but the pin and ✕: click to collect fresh data now.
+          HStack(spacing: 0) {
             Group {
                 if let mark = Self.mark {
                     Image(nsImage: mark).resizable().renderingMode(.template).aspectRatio(contentMode: .fit)
@@ -177,6 +187,14 @@ struct Header: View {
             (Text(Image(systemName: "person.fill")).font(.system(size: 10)).baselineOffset(1.5) + Text(" " + (Demo.isOn ? "Jamie Rivera" : NSFullUserName())).font(.system(size: 12)))
                 .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
+          }
+          .contentShape(Rectangle())
+          .hoverTip("Клик → обнови данните сега", "сесии, PR-и, Jira, Slack и срещи")
+          .onTapGesture {
+              refresh()
+              Tooltip.shared.show(title: "Обновявам…")
+              DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { Tooltip.shared.hide() }
+          }
             Image(systemName: pinned ? "pin.fill" : "pin")
                 .font(.system(size: 10, weight: .semibold))
                 .rotationEffect(.degrees(45))
@@ -207,14 +225,14 @@ struct Header: View {
                 .onHover { inside in
                     closeHovered = inside
                     if inside {
-                        Tooltip.shared.show(title: "Затвори панела", detail: "отваря се от билетчето в лентата горе")
+                        Tooltip.shared.show(title: "Затвори панела", detail: "спира и обновяването; отваря се от билетчето горе")
                     } else {
                         Tooltip.shared.hide()
                     }
                 }
                 .onTapGesture {
                     Tooltip.shared.hide()
-                    hidden = true
+                    close()
                 }
         }
         .frame(height: 22)

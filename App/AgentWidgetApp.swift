@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pinWatch: AnyCancellable?
     private var statusItem: NSStatusItem?
     private var hiddenWatch: AnyCancellable?
+    private var pausedWatch: AnyCancellable?
 
     static func main() {
         let app = NSApplication.shared
@@ -40,7 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let host = NSHostingView(rootView: PanelView(store: store, meetings: meetings,
                                                      open: { [weak self] in self?.open($0) },
-                                                     resized: { [weak self] in self?.panel?.fit($0) }))
+                                                     resized: { [weak self] in self?.panel?.fit($0) },
+                                                     refresh: { [weak self] in self?.refreshNow() }))
         host.sizingOptions = []
         panel = DesktopPanel(content: host)
         panel.setFrameTopLeftPoint(savedTopLeft())
@@ -70,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         collect()
         timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self else { return }
+                guard let self, !self.store.paused else { return }  // closed: no updates until it's opened again
                 self.ticks += 1
                 self.collect(local: self.ticks % 4 != 0)
                 if self.ticks % 4 == 0 { self.meetings.reload() }
@@ -113,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        item.button?.toolTip = "Agent Widget"
+        item.button?.toolTip = "BirdWatcher"
         statusItem = item
         hiddenWatch = store.$hidden.sink { [weak self] hidden in
             guard let self else { return }
@@ -125,6 +127,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bringOnScreen()
                 panel.orderFrontRegardless()
             }
+        }
+        pausedWatch = store.$paused.dropFirst().sink { [weak self] paused in
+            if !paused { self?.refreshNow() }  // it may have been closed for a while
         }
     }
 
@@ -165,14 +170,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Agent Widget"
+        image.accessibilityDescription = "BirdWatcher"
         return image
     }
 
     @objc private func statusItemClicked() {
         let menu = NSMenu()
-        let toggle = NSMenuItem(title: store.hidden ? "Отвори панела" : "Затвори панела", action: #selector(toggleHidden), keyEquivalent: "")
-        menu.addItem(toggle)
+        if store.hidden {
+            menu.addItem(NSMenuItem(title: "Отвори панела", action: #selector(openPanel), keyEquivalent: ""))
+        } else {
+            menu.addItem(NSMenuItem(title: "Скрий панела", action: #selector(hidePanel), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: "Затвори панела (спира обновяването)", action: #selector(closePanel), keyEquivalent: ""))
+        }
         menu.addItem(.separator())
         for line in summary() {
             let info = NSMenuItem(title: line, action: nil, keyEquivalent: "")
@@ -186,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Обнови сега", action: #selector(refreshNow), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Премести на този екран", action: #selector(moveHere), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Изход", action: #selector(quit), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Спри приложението", action: #selector(quit), keyEquivalent: ""))
         for item in menu.items where item.action != nil { item.target = self }
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)  // opens the menu under the icon
@@ -200,6 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let waiting = tasks.filter { $0.agent == "waiting" }.count
         let working = tasks.filter { $0.agent == "working" }.count
         var lines = ["\(tasks.count) задачи · \(working) работят · \(waiting) чакат теб"]
+        if store.paused { lines.append("Обновяването е спряно") }
         if let unread = snapshot.slack?.reduce(0, { $0 + $1.count }), unread > 0 { lines.append("Slack: \(unread) непрочетени") }
         let now = Date()
         if let meeting = meetings.current(at: now) {
@@ -211,8 +221,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return lines
     }
 
-    @objc private func toggleHidden() {
-        store.hidden.toggle()
+    @objc private func openPanel() {
+        store.hidden = false
+        store.paused = false
+    }
+
+    /// Out of sight, still up to date.
+    @objc private func hidePanel() {
+        store.hidden = true
+    }
+
+    /// Out of sight and no updates until it's opened again.
+    @objc private func closePanel() {
+        store.paused = true
+        store.hidden = true
+    }
+
+    /// Opening the app again (Spotlight, Finder, Launchpad) while it runs shows the panel.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openPanel()
+        return false
     }
 
     /// Back onto a screen if the panel was left on a display that's gone.
@@ -232,7 +260,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func moveHere() {
-        store.hidden = false
+        openPanel()
         bringOnScreen(force: true)
         panel.orderFrontRegardless()
     }
