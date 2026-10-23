@@ -307,8 +307,11 @@ def jira(extra_keys):
     issues = {i['key']: dict(title=i['fields']['summary'], status=i['fields']['status']['name'], url=JIRA + '/browse/' + i['key'])
               for i in data.get('issues', [])}
     week, month = week_month()
-    count = lambda jql: len(get('/rest/api/3/search/jql?' + urllib.parse.urlencode(dict(maxResults=100, fields='status', jql=jql)))
-                            .get('issues', []))
+    def count(jql):  # Jira counts on its side: no 100-issue page cap
+        body = json.dumps(dict(jql=jql)).encode()
+        request = urllib.request.Request(JIRA + '/rest/api/3/search/approximate-count', data=body, method='POST',
+                                         headers={**headers, 'Content-Type': 'application/json'})
+        return json.load(urllib.request.urlopen(request, timeout=20))['count']
     # Done means Jira's Done category: a ticket on staging still counts as open.
     closed = lambda since: count(f'assignee = currentUser() AND statusCategory = Done AND statusCategoryChangedDate >= "{since}"')
     still_open = count('assignee = currentUser() AND statusCategory != Done')
