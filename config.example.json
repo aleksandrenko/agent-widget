@@ -1,0 +1,11 @@
+{
+  "brand": { "name": "Agent Widget", "accent": "#3DDC84" },
+  "jira": {
+    "site": "https://your-company.atlassian.net",
+    "projects": ["WEB", "API"],
+    "activeStatuses": ["In Progress", "In Review"],
+    "doneStatuses": ["Done"]
+  },
+  "e2e": { "repo": "your-org/your-repo", "workflow": "e2e.yml", "titlePrefix": "" },
+  "prodComment": "deployed to production"
+}

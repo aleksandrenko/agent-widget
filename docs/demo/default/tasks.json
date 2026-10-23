@@ -1,0 +1,170 @@
+{
+ "generatedAt": 1792760517.499847,
+ "tasks": [
+  {
+   "id": "WEB-1201",
+   "key": "WEB-1201",
+   "title": "Checkout: show saved cards first",
+   "note": "say 'merge it' for #4512",
+   "agent": "waiting",
+   "lastActivity": 1792760397.499847,
+   "url": "claude://code/continue?session=last",
+   "jira": {
+    "state": "review",
+    "label": "In Review",
+    "url": "https://example.atlassian.net/browse/WEB-1201"
+   },
+   "github": {
+    "state": "ready",
+    "label": "web #4512",
+    "url": "https://github.com/",
+    "count": 1
+   },
+   "stage": 4,
+   "stageState": "wait"
+  },
+  {
+   "id": "WEB-1188",
+   "key": "WEB-1188",
+   "title": "Publish contracts as ESM",
+   "note": "api #918",
+   "agent": "working",
+   "lastActivity": 1792760517.499847,
+   "url": "claude://code/continue?session=last",
+   "jira": {
+    "state": "progress",
+    "label": "In Progress",
+    "url": "https://example.atlassian.net/browse/WEB-1188"
+   },
+   "github": {
+    "state": "draft",
+    "label": "api #918",
+    "url": "https://github.com/",
+    "count": 1
+   },
+   "stage": 1,
+   "stageState": "now"
+  },
+  {
+   "id": "WEB-1175",
+   "key": "WEB-1175",
+   "title": "Icons as cached SVG files",
+   "note": "4 PRs",
+   "agent": "idle",
+   "lastActivity": null,
+   "url": "claude://code/continue?session=last",
+   "jira": {
+    "state": "progress",
+    "label": "In Progress",
+    "url": "https://example.atlassian.net/browse/WEB-1175"
+   },
+   "github": {
+    "state": "ci",
+    "label": "web #4490",
+    "url": "https://github.com/",
+    "count": 4
+   },
+   "stage": 3,
+   "stageState": "now"
+  },
+  {
+   "id": "WEB-1160",
+   "key": "WEB-1160",
+   "title": "Switch account without reload",
+   "note": "CI on #4471 is red",
+   "agent": "waiting",
+   "lastActivity": 1792756317.499847,
+   "url": "claude://code/continue?session=last",
+   "jira": {
+    "state": "progress",
+    "label": "In Progress",
+    "url": "https://example.atlassian.net/browse/WEB-1160"
+   },
+   "github": {
+    "state": "fail",
+    "label": "web #4471",
+    "url": "https://github.com/",
+    "count": 1
+   },
+   "stage": 3,
+   "stageState": "fail"
+  },
+  {
+   "id": "session:demo",
+   "key": null,
+   "title": "Desktop task panel",
+   "note": "no ticket",
+   "agent": "working",
+   "lastActivity": 1792760517.499847,
+   "url": "claude://code/continue?session=last",
+   "jira": null,
+   "github": null,
+   "stage": 0,
+   "stageState": "now"
+  },
+  {
+   "id": "WEB-1142",
+   "key": "WEB-1142",
+   "title": "Load the user before the app code",
+   "note": "web #4402",
+   "agent": "done",
+   "lastActivity": 1792749717.499847,
+   "url": "claude://code/continue?session=last",
+   "jira": {
+    "state": "staging",
+    "label": "On staging",
+    "url": "https://example.atlassian.net/browse/WEB-1142"
+   },
+   "github": {
+    "state": "merged",
+    "label": "web #4402",
+    "url": "https://github.com/",
+    "count": 1
+   },
+   "stage": 4,
+   "stageState": "wait"
+  }
+ ],
+ "stats": {
+  "prs": {
+   "week": 14,
+   "month": 42
+  },
+  "jiraClosed": {
+   "week": 5,
+   "month": 18
+  },
+  "e2e": {
+   "ok": true,
+   "last": "e2e: full suite",
+   "lastAt": "2026-10-23T10:00:00Z",
+   "url": "https://github.com/",
+   "running": 1,
+   "passed": 8,
+   "recent": 10
+  }
+ },
+ "errors": {},
+ "slack": [
+  {
+   "id": "a",
+   "name": "Alex Morgan",
+   "channel": null,
+   "text": "Could you look at the icons PR before you merge it?",
+   "count": 2,
+   "url": "slack://open"
+  },
+  {
+   "id": "b",
+   "name": "Sam Lee",
+   "channel": "web-dev",
+   "text": "@you when does the user-first boot hit staging?",
+   "count": 1,
+   "url": "slack://open"
+  }
+ ],
+ "brand": {
+  "name": "Agent Widget",
+  "accent": "#3DDC84"
+ }
+}

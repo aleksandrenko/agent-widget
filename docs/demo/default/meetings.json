@@ -1,0 +1,17 @@
+[
+ {
+  "title": "Daily",
+  "startsIn": -300,
+  "minutes": 15
+ },
+ {
+  "title": "Planning",
+  "startsIn": 4,
+  "minutes": 30
+ },
+ {
+  "title": "1:1",
+  "startsIn": 150,
+  "minutes": 30
+ }
+]
