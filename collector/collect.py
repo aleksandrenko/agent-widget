@@ -17,7 +17,7 @@ SESSIONS = os.path.join(HOME, 'Library/Application Support/Claude/claude-code-se
 TRANSCRIPTS = os.path.join(HOME, '.claude/projects')
 CONFIG_FILE = os.environ.get('AGENT_WIDGET_CONFIG') or os.path.join(OUT_DIR, 'config.json')
 DEFAULTS = dict(
-    brand=dict(name='Agent Widget', accent='#3DDC84'),
+    brand=dict(accent='#3DDC84'),
     jira=dict(site='', projects=[], activeStatuses=['In Progress', 'In Review']),
     e2e=dict(repo='', workflow='', titlePrefix=''),
     prodComment='deployed to production',

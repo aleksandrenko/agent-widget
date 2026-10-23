@@ -178,7 +178,7 @@ struct Header: View {
             }
             .frame(width: 11, height: 15)
             .foregroundStyle(Palette.accent)
-            Text(brand?.name ?? "Agent Widget")
+            Text("BirdWatcher")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
                 .padding(.leading, 7)

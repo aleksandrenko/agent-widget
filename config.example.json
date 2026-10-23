@@ -1,6 +1,6 @@
 {
+  "team": "Your company",
   "brand": {
-    "name": "Agent Widget",
     "accent": "#3DDC84"
   },
   "jira": {

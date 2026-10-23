@@ -77,24 +77,26 @@ Pin it. It floats above your editor; unpin it when you want your screen back.
 
 ## Install
 
-Requirements: macOS 15 or later, the Xcode Command Line Tools (`xcode-select --install`), Homebrew Python 3 and the GitHub CLI signed in (`gh auth login`).
+1. Download **[BirdWatcher.dmg](https://github.com/aleksandrenko/agent-widget/releases/latest/download/BirdWatcher.dmg)**, open it and drag BirdWatcher into Applications.
+2. Open BirdWatcher. The first time, macOS says it can't check the app (it isn't notarized): open *System Settings → Privacy & Security*, scroll down and click **Open Anyway**.
+3. The setup window walks you through the rest: Python and the GitHub CLI if they're missing, your team's settings link, and the optional Jira token, calendar and Claude limit.
 
+Requirements: macOS 15 or later, a GitHub account with the `gh` CLI (setup offers to install and sign in).
+
+### From source
 ```bash
 git clone git@github.com:aleksandrenko/agent-widget.git ~/agent-widget
-mkdir -p ~/.agent-widget && cp ~/agent-widget/config.example.json ~/.agent-widget/config.json   # then edit it
-~/agent-widget/build.sh
+~/agent-widget/build.sh            # build for this Mac, install to /Applications, start
+~/agent-widget/build.sh --release  # universal dist/BirdWatcher.dmg
 ```
-
-`build.sh` compiles the app with the Command Line Tools (no Xcode project and no Xcode licence needed), installs it to `/Applications/BirdWatcher.app` (or `~/Applications` if that isn't writable), puts an icon on your Desktop, starts it, and registers it to start at login. If you stop it from the menu, start it again from Spotlight, Apps or the Desktop icon; opening it while it runs shows the panel.
-
-> The app runs the collector from `~/agent-widget/collector/collect.py`, so keep the clone at `~/agent-widget`.
+Needs the Xcode Command Line Tools (`xcode-select --install`); no Xcode project or licence.
 
 ### Configuration
 Everything specific to your company lives outside the repo, in `~/.agent-widget/`:
 
 | File | What |
 |---|---|
-| `config.json` | Copy of [`config.example.json`](config.example.json). `brand`: header name and accent colour. `jira`: your site, project keys, and which statuses count as active. `e2e`: the GitHub repo, workflow (file name or id) and run-title prefix to watch. `prodComment`: the text your release bot comments on a PR once it is in production. |
+| `config.json` | Written by setup from your team's link, or a copy of [`config.example.json`](config.example.json). A team link is an https JSON file `{"config": {…config.json…}, "brandSVG": "<svg…>"}`; a gist link works. `team`: your team's name (shown in setup). `brand`: the accent colour. `jira`: your site, project keys, and which statuses count as active. `e2e`: the GitHub repo, workflow (file name or id) and run-title prefix to watch. `prodComment`: the text your release bot comments on a PR once it is in production. |
 | `brand.svg` | Optional. Your logo mark for the header, drawn in the accent colour. Without it the header shows ✨. |
 
 Leave a section empty and that part of the panel stays empty (no Jira icons, no `e2e`).

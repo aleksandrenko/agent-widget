@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pinWatch: AnyCancellable?
     private var statusItem: NSStatusItem?
     private var hiddenWatch: AnyCancellable?
+    private let setup = Setup()
+    private var setupWindow: NSWindow?
 
     static func main() {
         let app = NSApplication.shared
@@ -34,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // One panel only: a second launch (another copy, a link) leaves the running one in charge.
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
             .filter { $0 != NSRunningApplication.current && !$0.isTerminated }
-        if Demo.directory == nil, !others.isEmpty {
+        if Demo.directory == nil, Demo.setupSnapshotPath == nil, !others.isEmpty {
             NSApp.terminate(nil)
             return
         }
@@ -47,6 +49,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrameTopLeftPoint(savedTopLeft())
         pinWatch = store.$pinned.sink { [weak self] in self?.panel.pin($0) }
         panel.orderFrontRegardless()
+        if let out = Demo.setupSnapshotPath {  // --setup-snapshot OUT: a picture of the setup window, then quit
+            setup.check()  // offscreen, onAppear may not run before the picture
+            let view = NSHostingView(rootView: SetupView(setup: setup, meetings: meetings) {})
+            view.frame = NSRect(x: 0, y: 0, width: 520, height: 640)
+            let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+            window.contentView = view
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                view.layoutSubtreeIfNeeded()
+                if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
+                }
+                NSApp.terminate(nil)
+            }
+            return
+        }
         if let demo = Demo.directory {
             Snapshot.load(from: demo.appendingPathComponent("tasks.json")).map(show)
             meetings.useDemo(demo.appendingPathComponent("meetings.json"))
@@ -60,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Snapshot.load().map(show)
         addStatusItem()
+        if setup.needed {
+            addDesktopIcon()
+            showSetup()
+        }
         try? SMAppService.mainApp.register()
         NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -237,6 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(language)
         menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: L("Настройка…", "Setup…"), action: #selector(showSetup), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: L("За BirdWatcher", "About BirdWatcher"), action: #selector(about), keyEquivalent: ""))
         for item in menu.items where item.action != nil { item.target = self }
         statusItem?.menu = menu
@@ -293,6 +316,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         meetings.reload()
     }
 
+    /// First launch: a link to the app on the Desktop, as the installer used to make.
+    private func addDesktopIcon() {
+        let link = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/BirdWatcher")
+        guard (try? link.checkResourceIsReachable()) != true else { return }
+        try? FileManager.default.createSymbolicLink(at: link, withDestinationURL: Bundle.main.bundleURL)
+    }
+
+    /// The setup window: on first launch, and from the menu.
+    @objc private func showSetup() {
+        if setupWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 640), styleMask: [.titled, .closable],
+                                  backing: .buffered, defer: false)
+            window.title = "BirdWatcher"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: SetupView(setup: setup, meetings: meetings) { [weak self] in
+                self?.setupWindow?.close()
+                self?.store.hidden = false
+                self?.refreshNow()
+            })
+            window.center()
+            setupWindow = window
+        }
+        NSApp.activate()
+        setupWindow?.makeKeyAndOrderFront(nil)
+    }
+
     /// The standard About window, with what the app is for.
     @objc private func about() {
         let text = L("""
@@ -335,13 +384,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(url)
     }
 
+    /// The collector ships inside the app; a clone at ~/agent-widget is used only when running from source.
+    private static var collector: String {
+        Bundle.main.path(forResource: "collect", ofType: "py", inDirectory: "collector")
+            ?? NSHomeDirectory() + "/agent-widget/collector/collect.py"
+    }
+
     private func collect(local: Bool = false) {
         guard !collecting else { return }
         collecting = true
         let home = NSHomeDirectory()
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/python3")
-        process.arguments = ["\(home)/agent-widget/collector/collect.py"] + (local ? ["--local"] : [])
+        process.executableURL = URL(fileURLWithPath: Setup.python)
+        process.arguments = [Self.collector] + (local ? ["--local"] : [])
         process.environment = ["HOME": home, "USER": NSUserName(), "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
                                "BIRDWATCHER_LANG": Lang.current.rawValue]
         process.standardOutput = FileHandle.nullDevice
@@ -366,6 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 enum Demo {
     static let directory = value(of: "--demo").map { URL(fileURLWithPath: $0) }
     static let snapshotPath = value(of: "--snapshot")
+    static let setupSnapshotPath = value(of: "--setup-snapshot")
     static var isOn: Bool { directory != nil }
 
     private static func value(of flag: String) -> String? {

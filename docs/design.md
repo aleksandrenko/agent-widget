@@ -6,7 +6,7 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 - One glass panel, top-left of the desktop, 360 pt wide by default (drag the right edge: 300–720 pt), radius 20. Drag it from anywhere to move it; the position is remembered.
 - Two layers: outer glass (blurred wallpaper + dark tint), inner darker layer behind the tasks
   (radius 14), so tasks read well and stand apart from the footer.
-- Header strip, one 22 pt row: brand mark (lined up with the status squares, ~/.agent-widget/brand.svg or ✨) + brand name; right: person icon + full name as one text, then the pin (lined up with the GitHub icons).
+- Header strip, one 22 pt row: brand mark (lined up with the status squares, ~/.agent-widget/brand.svg or ✨) + "BirdWatcher"; right: person icon + full name as one text, then the pin (lined up with the GitHub icons).
 - Still glow from the top-left corner over 80% of the width and 40% of the height: blue in the corner, violet right, teal and green below; fades out before its edges.
 - Bottom edge = week bar: 2 pt, accent-colour fill, edge to edge, Mon–Fri 09:00–18:00, fills by the minute.
   Hover: day, time, % of the day, % of the week.
