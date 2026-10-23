@@ -43,7 +43,7 @@ func draw(_ s: CGFloat) {
     shape.stroke()
     NSGraphicsContext.restoreGraphicsState()
 
-    // Binoculars, the minimal way: two thick rings, a bridge and two eyepiece ticks, in Payhawk green.
+    // Binoculars, the minimal way: two thick rings, a bridge and two eyepiece ticks, in the brand green (#3DDC84).
     // Drawn on a 64-unit grid (y up), centred on the tile.
     let u = s * 11.7 / 1024
     let p = { (x: CGFloat, y: CGFloat) in NSPoint(x: s / 2 + (x - 32) * u, y: s / 2 + (35 - y) * u) }  // the rings carry the weight: centre on them
