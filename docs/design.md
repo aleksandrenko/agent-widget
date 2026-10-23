@@ -32,7 +32,7 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 
 ## Footer (11 pt)
 - `e2e` text, green/red by the last run of the configured e2e workflow; blinking round clock while one runs. Click → that run.
-- PRs created week/month; Jira tickets open / closed this month (hidden without Jira).
+- PRs created week/month.
 - Right: calendar with today's meeting count. 10 min before a meeting: orange pill "3 · 4 мин";
   during one: red pill "3 · в среща" with a blinking dot. Click → meeting link, else Google Calendar.
 
