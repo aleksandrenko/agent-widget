@@ -31,6 +31,13 @@ def load_config():
 
 CONFIG = load_config()
 JIRA = CONFIG['jira']['site'].rstrip('/')
+LANG_BG = os.environ.get('BIRDWATCHER_LANG', 'bg') == 'bg'  # set by the app from the menu
+
+
+def tr(bg, en):
+    return bg if LANG_BG else en
+
+
 ENV = {**os.environ, 'PATH': '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'}
 NOW = time.time()
 RECENT_HOURS = 8
@@ -123,9 +130,9 @@ def transcript_refs(path):
                 if 'gh pr create' in cmd:
                     creating.add(part.get('id'))
                 if name == 'AskUserQuestion':
-                    questions[part.get('id')] = ((args.get('questions') or [{}])[0].get('question') or 'Има въпрос към теб')
+                    questions[part.get('id')] = ((args.get('questions') or [{}])[0].get('question') or tr('Има въпрос към теб', 'A question for you'))
                 elif name.endswith('wrap_up') and args.get('blocked'):
-                    ask = args.get('ask') or args.get('recap') or 'Чака отговор от теб'
+                    ask = args.get('ask') or args.get('recap') or tr('Чака отговор от теб', 'Waiting for your answer')
             elif part.get('type') == 'tool_result':
                 questions.pop(part.get('tool_use_id'), None)
                 if part.get('tool_use_id') in creating:
@@ -278,7 +285,7 @@ def slack():
     match = re.search(r'"label"="(\d+)"', out)
     if not match or int(match.group(1)) == 0:
         return []
-    return [dict(id='slack', name='Slack', channel=None, text='непрочетени лични съобщения и споменавания',
+    return [dict(id='slack', name='Slack', channel=None, text=tr('непрочетени лични съобщения и споменавания', 'unread direct messages and mentions'),
                  count=int(match.group(1)), url='slack://open')]
 
 
@@ -392,7 +399,7 @@ def build(sess, pulls, issues, jira_error):
         if session and session['status'] == 'waiting':
             note = session['detail']
         elif len(t['prs']) > 1:
-            note = f"{len(t['prs'])} PR-а"
+            note = f"{len(t['prs'])} " + tr('PR-а', 'PRs')
         elif lead:
             note = f"{lead['repo']} #{lead['number']}"
         else:
@@ -404,7 +411,7 @@ def build(sess, pulls, issues, jira_error):
             url=(session or {}).get('url') or (lead or {}).get('url') or (issue or {}).get('url', ''),
             jira=None if not jira_key else dict(
                 state=jira_state(issue['status']) if issue else ('unknown' if jira_error else 'todo'),
-                label=issue['status'] if issue else ('няма достъп до Jira' if jira_error else 'не е намерен'),
+                label=issue['status'] if issue else (tr('няма достъп до Jira', 'no access to Jira') if jira_error else tr('не е намерен', 'not found')),
                 url=issue['url'] if issue else f'{JIRA}/browse/{jira_key}'),
             github=None if not lead else dict(state=lead['github'], url=lead['url'],
                                               label=f"{lead['repo']} #{lead['number']}", count=len(t['prs'])),

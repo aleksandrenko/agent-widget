@@ -42,7 +42,7 @@ final class Meetings: ObservableObject {
         today = store.events(matching: predicate)
             .filter { !$0.isAllDay && $0.availability != .free && !declined($0) && ($0.attendees?.count ?? 0) > 0 }
             .sorted { $0.startDate < $1.startDate }
-            .map { Meeting(id: $0.eventIdentifier, title: $0.title ?? "Среща", start: $0.startDate, end: $0.endDate, url: link($0)) }
+            .map { Meeting(id: $0.eventIdentifier, title: $0.title ?? L("Среща", "Meeting"), start: $0.startDate, end: $0.endDate, url: link($0)) }
     }
 
     /// Demo meetings: [{"title": "Planning", "startsIn": 4, "minutes": 30}], minutes relative to now.

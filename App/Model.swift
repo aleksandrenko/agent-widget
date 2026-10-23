@@ -1,5 +1,23 @@
 import Foundation
 
+/// The UI language: Bulgarian or English, chosen in the menu bar menu (default: the Mac's language).
+enum Lang: String, CaseIterable {
+    case bg, en
+    static let key = "language"
+
+    static var current: Lang {
+        if let saved = UserDefaults.standard.string(forKey: key).flatMap(Lang.init(rawValue:)) { return saved }
+        return Locale.preferredLanguages.first?.hasPrefix("bg") == true ? .bg : .en
+    }
+
+    var name: String { self == .bg ? "Български" : "English" }
+}
+
+/// The text in the current language.
+func L(_ bg: String, _ en: String) -> String {
+    Lang.current == .bg ? bg : en
+}
+
 /// Mirrors ~/.agent-widget/tasks.json written by collector/collect.py.
 struct Snapshot: Decodable {
     var generatedAt: Double
@@ -109,16 +127,16 @@ struct TaskItem: Decodable, Identifiable {
 }
 
 enum Stage {
-    static let names = ["Писане на код", "Pushed", "AI review", "CI build", "On staging", "On prod"]
+    static var names: [String] { [L("Писане на код", "Writing code"), "Pushed", "AI review", "CI build", "On staging", "On prod"] }
 
     /// What the stage under the cursor means for a task at `stage` in `state`.
     static func describe(index: Int, stage: Int, state: String) -> String {
-        if index < stage { return "готово" }
-        if index > stage { return "предстои" }
+        if index < stage { return L("готово", "done") }
+        if index > stage { return L("предстои", "to come") }
         switch state {
-        case "now": return "върви сега"
-        case "fail": return "падна"
-        default: return "следващ, чака"
+        case "now": return L("върви сега", "running now")
+        case "fail": return L("падна", "failed")
+        default: return L("следващ, чака", "next, waiting")
         }
     }
 }

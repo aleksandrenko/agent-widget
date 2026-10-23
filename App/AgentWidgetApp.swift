@@ -215,10 +215,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func statusItemClicked() {
         let menu = NSMenu()
         if store.hidden {
-            menu.addItem(NSMenuItem(title: "Отвори панела", action: #selector(openPanel), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: L("Отвори панела", "Open panel"), action: #selector(openPanel), keyEquivalent: ""))
         } else {
-            menu.addItem(NSMenuItem(title: "Скрий панела", action: #selector(hidePanel), keyEquivalent: ""))
-            menu.addItem(NSMenuItem(title: "Затвори панела (спира обновяването)", action: #selector(closePanel), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: L("Скрий панела", "Hide panel"), action: #selector(hidePanel), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: L("Затвори панела (спира обновяването)", "Close panel (stops updates)"), action: #selector(closePanel), keyEquivalent: ""))
         }
         menu.addItem(.separator())
         for line in summary() {
@@ -227,14 +227,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(info)
         }
         menu.addItem(.separator())
-        let pin = NSMenuItem(title: "Закачи над всички прозорци", action: #selector(togglePin), keyEquivalent: "")
+        let pin = NSMenuItem(title: L("Закачи над всички прозорци", "Pin above all windows"), action: #selector(togglePin), keyEquivalent: "")
         pin.state = store.pinned ? .on : .off
         menu.addItem(pin)
-        menu.addItem(NSMenuItem(title: "Обнови сега", action: #selector(refreshNow), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Премести на този екран", action: #selector(moveHere), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L("Обнови сега", "Refresh now"), action: #selector(refreshNow), keyEquivalent: ""))
+        let language = NSMenuItem(title: L("Език", "Language"), action: nil, keyEquivalent: "")
+        language.submenu = NSMenu()
+        for lang in Lang.allCases {
+            let item = NSMenuItem(title: lang.name, action: #selector(pickLanguage(_:)), keyEquivalent: "")
+            item.representedObject = lang.rawValue
+            item.state = lang == store.language ? .on : .off
+            item.target = self
+            language.submenu?.addItem(item)
+        }
+        menu.addItem(language)
+        menu.addItem(NSMenuItem(title: L("Премести на този екран", "Move to this screen"), action: #selector(moveHere), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "За BirdWatcher", action: #selector(about), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Спри приложението", action: #selector(quit), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L("За BirdWatcher", "About BirdWatcher"), action: #selector(about), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L("Спри приложението", "Quit BirdWatcher"), action: #selector(quit), keyEquivalent: ""))
         for item in menu.items where item.action != nil { item.target = self }
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)  // opens the menu under the icon
@@ -243,20 +253,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The menu's info lines: tasks, Slack, the next meeting, e2e.
     private func summary() -> [String] {
-        guard let snapshot = store.snapshot else { return ["Събирам данните…"] }
+        guard let snapshot = store.snapshot else { return [L("Събирам данните…", "Collecting data…")] }
         let tasks = snapshot.tasks
         let waiting = tasks.filter { $0.agent == "waiting" }.count
         let working = tasks.filter { $0.agent == "working" }.count
-        var lines = ["\(tasks.count) задачи · \(working) работят · \(waiting) чакат теб"]
-        if store.paused { lines.append("Обновяването е спряно") }
-        if let unread = snapshot.slack?.reduce(0, { $0 + $1.count }), unread > 0 { lines.append("Slack: \(unread) непрочетени") }
+        var lines = [L("\(tasks.count) задачи · \(working) работят · \(waiting) чакат теб", "\(tasks.count) tasks · \(working) working · \(waiting) waiting for you")]
+        if store.paused { lines.append(L("Обновяването е спряно", "Updates are paused")) }
+        if let unread = snapshot.slack?.reduce(0, { $0 + $1.count }), unread > 0 { lines.append(L("Slack: \(unread) непрочетени", "Slack: \(unread) unread")) }
         let now = Date()
         if let meeting = meetings.current(at: now) {
-            lines.append("В среща: \(meeting.title) до \(meeting.end.formatted(date: .omitted, time: .shortened))")
+            lines.append(L("В среща: \(meeting.title) до \(meeting.end.formatted(date: .omitted, time: .shortened))", "In a meeting: \(meeting.title) until \(meeting.end.formatted(date: .omitted, time: .shortened))"))
         } else if let next = meetings.today.first(where: { $0.start > now }) {
-            lines.append("Следва: \(next.title) в \(next.start.formatted(date: .omitted, time: .shortened))")
+            lines.append(L("Следва: \(next.title) в \(next.start.formatted(date: .omitted, time: .shortened))", "Next: \(next.title) at \(next.start.formatted(date: .omitted, time: .shortened))"))
         }
-        if let e2e = snapshot.stats.e2e { lines.append(e2e.running > 0 ? "e2e: върви" : e2e.ok ? "e2e: зелено" : "e2e: червено") }
+        if let e2e = snapshot.stats.e2e { lines.append(e2e.running > 0 ? L("e2e: върви", "e2e: running") : e2e.ok ? L("e2e: зелено", "e2e: green") : L("e2e: червено", "e2e: red")) }
         return lines
     }
 
@@ -306,12 +316,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The standard About window, with what the app is for.
     @objc private func about() {
-        let text = """
+        let text = L("""
         Следи на десктопа твоите AI агенти, PR-и, Jira, Slack и срещи — и ти казва кой чака теб.
 
         Всяка задача е един ред: какво прави агентът, докъде е стигнала от кода до prod, \
         какво е PR-ът. Отдолу: e2e, PR-и и тикети за месеца, срещите днес и докъде е седмицата.
-        """
+        """, """
+        Watches your AI agents, PRs, Jira, Slack and meetings on your desktop, and tells you who's waiting for you.
+
+        Every task is one row: what the agent is doing, how far it got from code to prod, \
+        and its PR. Below: e2e, PRs and tickets this month, today's meetings and how far the week has gone.
+        """)
         let credits = NSMutableAttributedString(string: text, attributes: [
             .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor])
         let link = "github.com/aleksandrenko/agent-widget"
@@ -319,6 +334,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .font: NSFont.systemFont(ofSize: 11), .link: URL(string: "https://" + link)!]))
         NSApp.activate()
         NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "BirdWatcher", .credits: credits])
+    }
+
+    /// Switches the panel and menus now; the collector's own texts follow on its next run.
+    @objc private func pickLanguage(_ sender: NSMenuItem) {
+        guard let lang = (sender.representedObject as? String).flatMap(Lang.init(rawValue:)) else { return }
+        store.language = lang
+        refreshNow()
     }
 
     @objc private func quit() {
@@ -345,7 +367,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/python3")
         process.arguments = ["\(home)/agent-widget/collector/collect.py"] + (local ? ["--local"] : [])
-        process.environment = ["HOME": home, "USER": NSUserName(), "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
+        process.environment = ["HOME": home, "USER": NSUserName(), "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+                               "BIRDWATCHER_LANG": Lang.current.rawValue]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle(forWritingAtPath: "\(home)/.agent-widget/collect.log") ?? FileHandle.nullDevice
         process.terminationHandler = { [weak self] _ in

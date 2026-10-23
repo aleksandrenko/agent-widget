@@ -15,6 +15,10 @@ final class Store: ObservableObject {
         didSet { UserDefaults.standard.set(Double(width), forKey: Self.widthKey) }
     }
     static let widthKey = "panelWidth"
+    /// The UI language, picked in the menu bar menu; changing it redraws the panel.
+    @Published var language = Lang.current {
+        didSet { UserDefaults.standard.set(language.rawValue, forKey: Lang.key) }
+    }
     /// Closed with the panel's X; opened again from the menu bar ticket.
     @Published var hidden = !Demo.isOn && UserDefaults.standard.bool(forKey: hiddenKey) {
         didSet { UserDefaults.standard.set(hidden, forKey: Self.hiddenKey) }
@@ -43,10 +47,10 @@ enum Palette {
 
     static func agent(_ state: String) -> (color: Color, light: Color, label: String) {
         switch state {
-        case "working": (hex(0x1D4ED8), hex(0x5B8DEF), "Агентът работи")
-        case "waiting": (hex(0xC2410C), hex(0xF59E5B), "Агентът чака теб")
-        case "done": (hex(0x15803D), hex(0x4ADE80), "Агентът е готов")
-        default: (hex(0x2F3542), hex(0x5B6475), "Няма агент по задачата")
+        case "working": (hex(0x1D4ED8), hex(0x5B8DEF), L("Агентът работи", "The agent is working"))
+        case "waiting": (hex(0xC2410C), hex(0xF59E5B), L("Агентът чака теб", "The agent is waiting for you"))
+        case "done": (hex(0x15803D), hex(0x4ADE80), L("Агентът е готов", "The agent is done"))
+        default: (hex(0x2F3542), hex(0x5B6475), L("Няма агент по задачата", "No agent on this task"))
         }
     }
 
@@ -60,27 +64,27 @@ enum Palette {
 
     static func jira(_ state: String) -> (color: Color, meaning: String) {
         switch state {
-        case "progress": (hex(0x3B82F6), "синьо = в работа")
-        case "review": (hex(0xA78BFA), "лилаво = чака review")
-        case "staging": (hex(0x4ADE80), "зелено = на staging")
-        case "done": (hex(0x2DD4BF), "тюркоаз = готово")
-        case "blocked": (hex(0xF87171), "червено = блокиран")
-        case "unknown": (hex(0x3A3A3A), "тъмно = няма връзка с Jira")
-        default: (hex(0x6B6B6B), "сиво = не е започнат")
+        case "progress": (hex(0x3B82F6), L("синьо = в работа", "blue = in progress"))
+        case "review": (hex(0xA78BFA), L("лилаво = чака review", "violet = waiting for review"))
+        case "staging": (hex(0x4ADE80), L("зелено = на staging", "green = on staging"))
+        case "done": (hex(0x2DD4BF), L("тюркоаз = готово", "teal = done"))
+        case "blocked": (hex(0xF87171), L("червено = блокиран", "red = blocked"))
+        case "unknown": (hex(0x3A3A3A), L("тъмно = няма връзка с Jira", "dark = no connection to Jira"))
+        default: (hex(0x6B6B6B), L("сиво = не е започнат", "grey = not started"))
         }
     }
 
     static func github(_ state: String) -> (color: Color, meaning: String) {
         switch state {
-        case "draft": (hex(0x6B6B6B), "сиво = draft")
-        case "review": (hex(0x93C5FD), "светлосиньо = чака AI review")
-        case "changes": (hex(0xFB923C), "оранжево = AI review иска промени")
-        case "ci": (hex(0xFBBF24), "жълто = CI върви")
-        case "fail": (hex(0xF87171), "червено = CI пада или конфликт")
-        case "ready": (hex(0x4ADE80), "зелено = approved и зелен CI, готов за merge")
-        case "merged": (hex(0xA78BFA), "лилаво = merged, на staging")
-        case "prod": (hex(0x2DD4BF), "тюркоаз = на prod")
-        default: (hex(0x3A3A3A), "тъмно = няма PR")
+        case "draft": (hex(0x6B6B6B), L("сиво = draft", "grey = draft"))
+        case "review": (hex(0x93C5FD), L("светлосиньо = чака AI review", "light blue = waiting for AI review"))
+        case "changes": (hex(0xFB923C), L("оранжево = AI review иска промени", "orange = AI review wants changes"))
+        case "ci": (hex(0xFBBF24), L("жълто = CI върви", "yellow = CI running"))
+        case "fail": (hex(0xF87171), L("червено = CI пада или конфликт", "red = CI failing or a conflict"))
+        case "ready": (hex(0x4ADE80), L("зелено = approved и зелен CI, готов за merge", "green = approved and CI green, ready to merge"))
+        case "merged": (hex(0xA78BFA), L("лилаво = merged, на staging", "violet = merged, on staging"))
+        case "prod": (hex(0x2DD4BF), L("тюркоаз = на prod", "teal = on prod"))
+        default: (hex(0x3A3A3A), L("тъмно = няма PR", "dark = no PR"))
         }
     }
 }
@@ -105,7 +109,7 @@ struct PanelView: View {
                         TaskRow(task: task, open: open)
                     }
                     if snapshot.tasks.isEmpty {
-                        placeholder("Няма активни задачи")
+                        placeholder(L("Няма активни задачи", "No active tasks"))
                     }
                 }
                 .padding(.horizontal, 6)
@@ -126,7 +130,7 @@ struct PanelView: View {
                 }
                 Footer(stats: snapshot.stats, errors: snapshot.errors, meetings: meetings, open: open)
             } else {
-                placeholder("Събирам данните…")
+                placeholder(L("Събирам данните…", "Collecting data…"))
             }
         }
         .padding(.horizontal, 8)
@@ -189,10 +193,10 @@ struct Header: View {
                 .lineLimit(1)
           }
           .contentShape(Rectangle())
-          .hoverTip("Клик → обнови данните сега", "сесии, PR-и, Slack и срещи")
+          .hoverTip(L("Клик → обнови данните сега", "Click → refresh now"), L("сесии, PR-и, Slack и срещи", "sessions, PRs, Slack and meetings"))
           .onTapGesture {
               refresh()
-              Tooltip.shared.show(title: "Обновявам…")
+              Tooltip.shared.show(title: L("Обновявам…", "Refreshing…"))
               DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { Tooltip.shared.hide() }
           }
             Image(systemName: pinned ? "pin.fill" : "pin")
@@ -206,8 +210,8 @@ struct Header: View {
                 .onHover { inside in
                     pinHovered = inside
                     if inside {
-                        Tooltip.shared.show(title: pinned ? "Над всички прозорци" : "На десктопа, под прозорците",
-                                            detail: pinned ? "клик → върни го на десктопа" : "клик → закачи го над всичко")
+                        Tooltip.shared.show(title: pinned ? L("Над всички прозорци", "Above all windows") : L("На десктопа, под прозорците", "On the desktop, under the windows"),
+                                            detail: pinned ? L("клик → върни го на десктопа", "click → back to the desktop") : L("клик → закачи го над всичко", "click → pin it above everything"))
                     } else {
                         Tooltip.shared.hide()
                     }
@@ -225,7 +229,7 @@ struct Header: View {
                 .onHover { inside in
                     closeHovered = inside
                     if inside {
-                        Tooltip.shared.show(title: "Затвори панела", detail: "спира и обновяването; отваря се от билетчето горе")
+                        Tooltip.shared.show(title: L("Затвори панела", "Close panel"), detail: L("спира и обновяването; отваря се от билетчето горе", "also stops updates; open it again from the menu bar"))
                     } else {
                         Tooltip.shared.hide()
                     }
@@ -330,7 +334,7 @@ struct VisualEffect: NSViewRepresentable {
 // MARK: - Week line
 
 struct WeekLine: View {
-    static let days = ["Понеделник", "Вторник", "Сряда", "Четвъртък", "Петък"]
+    static var days: [String] { [L("Понеделник", "Monday"), L("Вторник", "Tuesday"), L("Сряда", "Wednesday"), L("Четвъртък", "Thursday"), L("Петък", "Friday")] }
     static let workday = (start: 9.0, end: 18.0)
 
     var body: some View {
@@ -346,13 +350,13 @@ struct WeekLine: View {
                 let day = min(4, Int(x / width * 5))
                 let state: String
                 if week.weekday > 4 || day < week.weekday {
-                    state = "минал"
+                    state = L("минал", "past")
                 } else if day > week.weekday {
-                    state = "предстои"
+                    state = L("предстои", "to come")
                 } else {
-                    state = "\(context.date.formatted(date: .omitted, time: .shortened)) · \(Int(week.today * 100))% от деня"
+                    state = L("\(context.date.formatted(date: .omitted, time: .shortened)) · \(Int(week.today * 100))% от деня", "\(context.date.formatted(date: .omitted, time: .shortened)) · \(Int(week.today * 100))% of the day")
                 }
-                return ("\(Self.days[day]) · \(state)", "седмицата: \(Int(week.fraction * 100))%")
+                return ("\(Self.days[day]) · \(state)", L("седмицата: \(Int(week.fraction * 100))%", "the week: \(Int(week.fraction * 100))%"))
             }
         }
     }
@@ -385,7 +389,7 @@ struct TaskRow: View {
                         Text(key)
                         Text("·")
                     }
-                    Text(task.note.isEmpty && task.key == nil ? "без тикет" : task.note).lineLimit(1)
+                    Text(task.note.isEmpty && task.key == nil ? L("без тикет", "no ticket") : task.note).lineLimit(1)
                 }
                 .font(.system(size: 11))
                 .foregroundStyle(Palette.hex(0x8FA3BF))
@@ -413,8 +417,8 @@ struct TaskRow: View {
     }
 
     private var githubTitle: String {
-        guard let github = task.github else { return "няма PR" }
-        return github.count > 1 ? "\(github.label) (+\(github.count - 1) PR-а)" : github.label
+        guard let github = task.github else { return L("няма PR", "no PR") }
+        return github.count > 1 ? L("\(github.label) (+\(github.count - 1) PR-а)", "\(github.label) (+\(github.count - 1) PRs)") : github.label
     }
 }
 
@@ -545,9 +549,9 @@ struct StageLine: View {
             .padding(.vertical, 3)
             .hoverTip { x, width in
                 let index = min(Stage.names.count - 1, max(0, Int(x / width * Double(Stage.names.count))))
-                let current = task.stage < Stage.names.count ? Stage.names[task.stage] : "на prod"
+                let current = task.stage < Stage.names.count ? Stage.names[task.stage] : L("на prod", "on prod")
                 return ("\(index + 1). \(Stage.names[index]) · \(Stage.describe(index: index, stage: task.stage, state: task.stageState))",
-                        "сега: \(current)")
+                        L("сега: \(current)", "now: \(current)"))
             }
     }
 }
@@ -593,7 +597,7 @@ struct SlackRow: View {
         .background(Color.white.opacity(hovered ? 0.05 : 0), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
-        .hoverTip(item.channel == nil ? "Лично съобщение" : "Споменаване в #\(item.channel!)", "клик → Slack")
+        .hoverTip(item.channel == nil ? L("Лично съобщение", "Direct message") : L("Споменаване в #\(item.channel!)", "Mention in #\(item.channel!)"), L("клик → Slack", "click → Slack"))
         .onTapGesture { open(item.url) }
     }
 }
@@ -637,7 +641,7 @@ struct Footer: View {
           VStack(spacing: 0) {
             HStack(spacing: 14) {
                 if stats.e2e != nil || errors["e2e"] != nil { e2e }
-                counter(icon: "arrow.triangle.pull", counts: stats.prs, title: "Твоите PR-и", error: errors["prCounts"])
+                counter(icon: "arrow.triangle.pull", counts: stats.prs, title: L("Твоите PR-и", "Your PRs"), error: errors["prCounts"])
                 if stats.jira != nil { jiraCounter }  // appears once Jira answers (needs the API token)
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {  // the limit bar sits close to the calendar
@@ -676,16 +680,16 @@ struct Footer: View {
     }
 
     private var e2eTitle: String {
-        guard let state = stats.e2e else { return "e2e: няма данни" }
-        return state.ok ? "e2e: последният run мина" : "e2e: последният run падна"
+        guard let state = stats.e2e else { return L("e2e: няма данни", "e2e: no data") }
+        return state.ok ? L("e2e: последният run мина", "e2e: the last run passed") : L("e2e: последният run падна", "e2e: the last run failed")
     }
 
     private var e2eDetail: String? {
         guard let state = stats.e2e else { return errors["e2e"] }
         var lines: [String] = []
-        if let recent = state.recent { lines.append("\(state.passed ?? 0) от последните \(recent) минаха") }
-        if state.running > 0 { lines.append("\(state.running) вървят в момента") }
-        lines.append(state.running > 0 ? "клик → текущият run" : "клик → последният run")
+        if let recent = state.recent { lines.append(L("\(state.passed ?? 0) от последните \(recent) минаха", "\(state.passed ?? 0) of the last \(recent) passed")) }
+        if state.running > 0 { lines.append(L("\(state.running) вървят в момента", "\(state.running) running now")) }
+        lines.append(state.running > 0 ? L("клик → текущият run", "click → the running run") : L("клик → последният run", "click → the last run"))
         return lines.joined(separator: "\n")
     }
 
@@ -699,8 +703,8 @@ struct Footer: View {
                 Text("–")
             }
         }
-        .hoverTip("Твоите Jira тикети",
-                  stats.jira.map { "\($0.open) отворени · \($0.month) Done този месец" } ?? errors["jira"])
+        .hoverTip(L("Твоите Jira тикети", "Your Jira tickets"),
+                  stats.jira.map { L("\($0.open) отворени · \($0.month) Done този месец", "\($0.open) open · \($0.month) done this month") } ?? errors["jira"])
     }
 
     private func counter(icon: String, counts: Snapshot.Counts?, title: String, error: String?) -> some View {
@@ -712,7 +716,7 @@ struct Footer: View {
                 Text("–")
             }
         }
-        .hoverTip(title, counts.map { "\($0.week) тази седмица · \($0.month) този месец" } ?? error)
+        .hoverTip(title, counts.map { L("\($0.week) тази седмица · \($0.month) този месец", "\($0.week) this week · \($0.month) this month") } ?? error)
     }
 
     /// Today's meeting count; turns into an orange "3 · 4 мин" pill before a meeting and a red one during it.
@@ -731,29 +735,29 @@ struct Footer: View {
                             .opacity(0.55 + 0.45 * cos(context.date.timeIntervalSinceReferenceDate * .pi / 0.8))
                     }
                     .frame(width: 6, height: 6)
-                    Text("в среща")
+                    Text(L("в среща", "in a meeting"))
                 }
                 .foregroundStyle(Palette.hex(0xFCA5A5))
                 .pill(Palette.hex(0xF87171))
-                .hoverTip("В среща: \(meeting.title)", "до \(meeting.end.formatted(date: .omitted, time: .shortened)) · още \(left) мин")
+                .hoverTip(L("В среща: \(meeting.title)", "In a meeting: \(meeting.title)"), L("до \(meeting.end.formatted(date: .omitted, time: .shortened)) · още \(left) мин", "until \(meeting.end.formatted(date: .omitted, time: .shortened)) · \(left) min left"))
             } else if let meeting = meetings.upcoming(at: now) {
                 let minutes = max(1, Int(ceil(meeting.start.timeIntervalSince(now) / 60)))
                 HStack(spacing: 4) {
                     Image(systemName: "calendar")
                     count
                     Text("·")
-                    Text("\(minutes) мин")
+                    Text(L("\(minutes) мин", "\(minutes) min"))
                 }
                 .foregroundStyle(Palette.hex(0xFDBA74))
                 .pill(Palette.hex(0xF97316))
-                .hoverTip("\(meeting.title) след \(minutes) мин",
+                .hoverTip(L("\(meeting.title) след \(minutes) мин", "\(meeting.title) in \(minutes) min"),
                           "\(meeting.start.formatted(date: .omitted, time: .shortened))–\(meeting.end.formatted(date: .omitted, time: .shortened))")
             } else {
                 HStack(spacing: 4) {
                     Image(systemName: "calendar")
                     count
                 }
-                .hoverTip(meetings.access ? "\(meetings.today.count) срещи днес" : "Няма достъп до календара", schedule)
+                .hoverTip(meetings.access ? L("\(meetings.today.count) срещи днес", "\(meetings.today.count) meetings today") : L("Няма достъп до календара", "No access to the calendar"), schedule)
             }
         }
         .padding(.horizontal, 4)

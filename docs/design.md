@@ -17,7 +17,7 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 - Template icon: the minimal binoculars of the app icon; clear lenses while the panel is open, covered ("eyes shut") while it is closed.
 - Blink: lids sweep across the lenses and back every 3.5 s while an agent waits for you or Slack has unread.
 - App icon: minimal green binoculars (two rings, a bridge, two eyepiece ticks) on the dark glass tile.
-- Any click opens a menu: Open / Hide / Close panel, About, summary lines (tasks · working · waiting, Slack, next meeting, e2e), pin, refresh now, move to this screen, quit.
+- Any click opens a menu: Open / Hide / Close panel, About, summary lines (tasks · working · waiting, Slack, next meeting, e2e), pin, refresh now, language (Български / English, default: the Mac's language), move to this screen, about, quit.
 - Header: ✕ after the pin closes the panel (remembered across restarts).
 
 ## Task row (one list, hairline separators, light hover on the whole row)
