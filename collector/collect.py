@@ -6,7 +6,7 @@ config.example.json. Without them those parts of the panel stay empty.
 Writes ~/.agent-widget/tasks.json and prints `changed` or `same`.
 
     python3 collect.py           # everything
-    python3 collect.py --local   # sessions only, last GitHub/Jira/Slack answers reused
+    python3 collect.py --local   # sessions and Slack only, last GitHub/Jira answers reused
 """
 import base64, concurrent.futures as cf, datetime as dt, glob, json, os, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 
@@ -398,14 +398,18 @@ def build(sess, pulls, issues, jira_error):
 
 
 def main(local=False):
-    """local: refresh the Claude sessions only and reuse the last GitHub/Jira/Slack answers (cheap, every 15 s)."""
+    """local: refresh the Claude sessions and Slack only and reuse the last GitHub/Jira answers (cheap, every 15 s)."""
     os.makedirs(OUT_DIR, exist_ok=True)
     remote = json.load(open(REMOTE_CACHE)) if os.path.exists(REMOTE_CACHE) else None
     if local and remote and NOW - remote['at'] < 300:
         sess = sessions()
         json.dump(_refs, open(REFS_CACHE, 'w'))
+        try:
+            unread = slack()  # local and cheap: read it every time, so a read message leaves the panel within 15 s
+        except Exception:
+            unread = remote['slack']
         write(dict(generatedAt=NOW, brand=CONFIG['brand'], tasks=build(sess, remote['pulls'], remote['issues'], 'jira' in remote['errors']),
-                   slack=remote['slack'], stats=remote['stats'], errors=remote['errors']))
+                   slack=unread, stats=remote['stats'], errors=remote['errors']))
         return
     errors = {}
 

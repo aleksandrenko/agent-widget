@@ -42,7 +42,7 @@ PLIST
 codesign --force --sign "${IDENTITY:--}" "$APP"
 
 pkill -x AgentWidget || true
-sleep 1
+while pgrep -x AgentWidget >/dev/null; do sleep 0.2; done  # the old one must be gone, or the new one quits
 mkdir -p ~/Applications ~/.agent-widget
 touch ~/.agent-widget/collect.log
 rm -rf ~/Applications/"Agent Widget.app"

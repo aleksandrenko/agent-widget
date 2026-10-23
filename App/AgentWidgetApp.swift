@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // One panel only: a second launch (another copy, a link) leaves the running one in charge.
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
-            .filter { $0 != NSRunningApplication.current }
+            .filter { $0 != NSRunningApplication.current && !$0.isTerminated }
         if Demo.directory == nil, !others.isEmpty {
             NSApp.terminate(nil)
             return

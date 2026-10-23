@@ -1,7 +1,7 @@
 # How it works
 
 ## Data flow
-1. Every 15 s the app runs `collector/collect.py --local` (Claude sessions only, the last GitHub / Jira / Slack answers reused, well under a second); every minute it runs the full collector.
+1. Every 15 s the app runs `collector/collect.py --local` (Claude sessions and the Slack badge, the last GitHub / Jira answers reused, well under a second); every minute it runs the full collector.
 2. The collector gathers sessions, PRs, Jira, Slack and footer stats in parallel (one failing source never blanks the others; its error shows in a tooltip) and writes `~/.agent-widget/tasks.json`.
 3. The app reloads the panel from that file. Meetings come from EventKit inside the app and refresh with the same timer, and on any calendar change.
 
