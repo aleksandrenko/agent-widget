@@ -600,7 +600,7 @@ struct SlackRow: View {
 
 // MARK: - Usage pill
 
-/// How much of the Claude 5-hour session limit is used: a small rounded outline (20 × 11 pt) that
+/// How much of the Claude 5-hour session limit is used: a small rounded outline (18 × 9 pt) that
 /// fills up as the limit is used, green, then orange past 70%, red past 90%. Hover shows the %.
 struct UsagePill: View {
     var usage: Snapshot.Usage
@@ -609,14 +609,14 @@ struct UsagePill: View {
         let used = min(1, max(0, usage.fiveHour.percent / 100))
         let color = used >= 0.9 ? Palette.hex(0xF87171) : used >= 0.7 ? Palette.hex(0xFB923C) : Palette.accent
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.85), lineWidth: 1)  // the footer icons' colour
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                 .fill(color)
-                .frame(width: max(2, 16 * used))
+                .frame(width: max(2, 14 * used))
                 .padding(2)
         }
-        .frame(width: 20, height: 11)
+        .frame(width: 18, height: 9)
         .hoverTip("\(Int(usage.fiveHour.percent))%")
     }
 }
@@ -640,8 +640,10 @@ struct Footer: View {
                 counter(icon: "arrow.triangle.pull", counts: stats.prs, title: "Твоите PR-и", error: errors["prCounts"])
                 if stats.jira != nil { jiraCounter }  // appears once Jira answers (needs the API token)
                 Spacer(minLength: 0)
-                if let ai = stats.ai { UsagePill(usage: ai) }
-                calendar(context.date)
+                HStack(spacing: 6) {  // the limit bar sits close to the calendar
+                    if let ai = stats.ai { UsagePill(usage: ai) }
+                    calendar(context.date)
+                }
             }
             .font(.system(size: 11))
             .foregroundStyle(.white.opacity(0.85))

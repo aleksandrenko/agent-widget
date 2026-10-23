@@ -33,7 +33,7 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 ## Footer (11 pt)
 - `e2e` text, green/red by the last run of the configured e2e workflow; blinking round clock while one runs. Click → that run.
 - PRs created week/month.
-- Right: a small rounded outline (20 × 11 pt) filling up with the Claude 5-hour limit used; green, orange past 70%, red past 90%; hover shows just the %. Then the calendar with today's meeting count. 10 min before a meeting: orange pill "3 · 4 мин";
+- Right: a small rounded outline (18 × 9 pt, border in the footer icon colour, 6 pt from the calendar) filling up with the Claude 5-hour limit used; green, orange past 70%, red past 90%; hover shows just the %. Then the calendar with today's meeting count. 10 min before a meeting: orange pill "3 · 4 мин";
   during one: red pill "3 · в среща" with a blinking dot. Click → meeting link, else Google Calendar.
 
 ## Slack (UI built; data source not decided, so it stays hidden)
