@@ -20,8 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var collecting = false
     private var pinWatch: AnyCancellable?
     private var statusItem: NSStatusItem?
-    private var peeking = false
-    private var clickOutside: Any?
+    private var hiddenWatch: AnyCancellable?
 
     static func main() {
         let app = NSApplication.shared
@@ -107,21 +106,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Menu bar item
 
-    /// Click: bring the panel above every window until the next click elsewhere. Right click: a menu.
+    /// The ticket in the menu bar: outlined while the panel is open, filled while it is closed.
+    /// Any click opens a menu to open or close the panel, with a short summary.
     private func addStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = Self.menuBarIcon()
-        item.button?.toolTip = "Agent Widget"
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        item.button?.toolTip = "Agent Widget"
         statusItem = item
+        hiddenWatch = store.$hidden.sink { [weak self] hidden in
+            guard let self else { return }
+            statusItem?.button?.image = Self.menuBarIcon(filled: hidden)
+            if hidden {
+                panel.orderOut(nil)
+                Tooltip.shared.hide()
+            } else {
+                bringOnScreen()
+                panel.orderFrontRegardless()
+            }
+        }
     }
 
-    /// A ticket: a rounded outline with a notch on each side and a dashed tear line.
-    /// A template, so macOS tints it like the other menu bar icons.
-    private static func menuBarIcon() -> NSImage {
-        // About the size of the keyboard-language icon next to it: an 18 × 13 pt ticket.
+    /// A ticket: a rounded shape with a notch on each side and a dashed tear line, 18 × 13 pt like the
+    /// keyboard-language icon. A template, so macOS tints it like the other menu bar icons.
+    private static func menuBarIcon(filled: Bool) -> NSImage {
         let image = NSImage(size: NSSize(width: 20, height: 16), flipped: false) { rect in
             let r = rect.insetBy(dx: 1, dy: 1.5)
             let corner: CGFloat = 2.5, notch: CGFloat = 2.4
@@ -143,12 +152,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ticket.lineWidth = 1.5
             ticket.lineJoinStyle = .round
             NSColor.black.set()
-            ticket.stroke()
+            filled ? ticket.fill() : ticket.stroke()
             let tear = NSBezierPath()
             tear.move(to: NSPoint(x: r.minX + r.width * 0.62, y: r.minY + 3))
             tear.line(to: NSPoint(x: r.minX + r.width * 0.62, y: r.maxY - 3))  // 7 pt: dash, gap, dash
             tear.lineWidth = 1.5
             tear.setLineDash([2.5, 2], count: 2, phase: 0)
+            if filled {
+                NSGraphicsContext.current?.compositingOperation = .destinationOut  // cut the tear line out of the fill
+            }
             tear.stroke()
             return true
         }
@@ -158,29 +170,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusItemClicked() {
-        if NSApp.currentEvent?.type == .rightMouseUp {
-            showMenu()
-        } else {
-            peeking ? endPeek() : peek()
+        let menu = NSMenu()
+        let toggle = NSMenuItem(title: store.hidden ? "Отвори панела" : "Затвори панела", action: #selector(toggleHidden), keyEquivalent: "")
+        menu.addItem(toggle)
+        menu.addItem(.separator())
+        for line in summary() {
+            let info = NSMenuItem(title: line, action: nil, keyEquivalent: "")
+            info.isEnabled = false
+            menu.addItem(info)
         }
+        menu.addItem(.separator())
+        let pin = NSMenuItem(title: "Закачи над всички прозорци", action: #selector(togglePin), keyEquivalent: "")
+        pin.state = store.pinned ? .on : .off
+        menu.addItem(pin)
+        menu.addItem(NSMenuItem(title: "Обнови сега", action: #selector(refreshNow), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Премести на този екран", action: #selector(moveHere), keyEquivalent: ""))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Изход", action: #selector(quit), keyEquivalent: ""))
+        for item in menu.items where item.action != nil { item.target = self }
+        statusItem?.menu = menu
+        statusItem?.button?.performClick(nil)  // opens the menu under the icon
+        statusItem?.menu = nil  // rebuilt on every click, so the summary is current
     }
 
-    private func peek() {
-        bringOnScreen()
-        guard !store.pinned else { return panel.orderFrontRegardless() }
-        peeking = true
-        panel.pin(true)
-        clickOutside = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            MainActor.assumeIsolated { self?.endPeek() }
+    /// The menu's info lines: tasks, Slack, the next meeting, e2e.
+    private func summary() -> [String] {
+        guard let snapshot = store.snapshot else { return ["Събирам данните…"] }
+        let tasks = snapshot.tasks
+        let waiting = tasks.filter { $0.agent == "waiting" }.count
+        let working = tasks.filter { $0.agent == "working" }.count
+        var lines = ["\(tasks.count) задачи · \(working) работят · \(waiting) чакат теб"]
+        if let unread = snapshot.slack?.reduce(0, { $0 + $1.count }), unread > 0 { lines.append("Slack: \(unread) непрочетени") }
+        let now = Date()
+        if let meeting = meetings.current(at: now) {
+            lines.append("В среща: \(meeting.title) до \(meeting.end.formatted(date: .omitted, time: .shortened))")
+        } else if let next = meetings.today.first(where: { $0.start > now }) {
+            lines.append("Следва: \(next.title) в \(next.start.formatted(date: .omitted, time: .shortened))")
         }
+        if let e2e = snapshot.stats.e2e { lines.append(e2e.running > 0 ? "e2e: върви" : e2e.ok ? "e2e: зелено" : "e2e: червено") }
+        return lines
     }
 
-    private func endPeek() {
-        if let monitor = clickOutside { NSEvent.removeMonitor(monitor) }
-        clickOutside = nil
-        guard peeking else { return }
-        peeking = false
-        panel.pin(store.pinned)
+    @objc private func toggleHidden() {
+        store.hidden.toggle()
     }
 
     /// Back onto a screen if the panel was left on a display that's gone.
@@ -190,25 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrameTopLeftPoint(NSPoint(x: screen.minX + 16, y: screen.maxY - 12))
     }
 
-    private func showMenu() {
-        let menu = NSMenu()
-        let pin = NSMenuItem(title: "Закачи над всички прозорци", action: #selector(togglePin), keyEquivalent: "")
-        pin.state = store.pinned ? .on : .off
-        [pin,
-         NSMenuItem(title: "Обнови сега", action: #selector(refreshNow), keyEquivalent: ""),
-         NSMenuItem(title: "Премести на този екран", action: #selector(moveHere), keyEquivalent: ""),
-         .separator(),
-         NSMenuItem(title: "Изход", action: #selector(quit), keyEquivalent: "")].forEach { item in
-            item.target = self
-            menu.addItem(item)
-        }
-        statusItem?.menu = menu
-        statusItem?.button?.performClick(nil)  // opens the menu under the icon
-        statusItem?.menu = nil  // so the next left click peeks again
-    }
-
     @objc private func togglePin() {
-        endPeek()
         store.pinned.toggle()
     }
 
@@ -218,6 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func moveHere() {
+        store.hidden = false
         bringOnScreen(force: true)
         panel.orderFrontRegardless()
     }

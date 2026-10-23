@@ -15,6 +15,11 @@ final class Store: ObservableObject {
         didSet { UserDefaults.standard.set(Double(width), forKey: Self.widthKey) }
     }
     static let widthKey = "panelWidth"
+    /// Closed with the panel's X; opened again from the menu bar ticket.
+    @Published var hidden = !Demo.isOn && UserDefaults.standard.bool(forKey: hiddenKey) {
+        didSet { UserDefaults.standard.set(hidden, forKey: Self.hiddenKey) }
+    }
+    static let hiddenKey = "panelHidden"
 }
 
 // MARK: - Palette
@@ -85,7 +90,7 @@ struct PanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Header(brand: store.snapshot?.brand, pinned: $store.pinned)
+            Header(brand: store.snapshot?.brand, pinned: $store.pinned, hidden: $store.hidden)
             if let snapshot = store.snapshot {
                 VStack(spacing: 0) {
                     ForEach(Array(snapshot.tasks.enumerated()), id: \.element.id) { index, task in
@@ -147,7 +152,9 @@ struct PanelView: View {
 struct Header: View {
     var brand: Snapshot.Brand?
     @Binding var pinned: Bool
+    @Binding var hidden: Bool
     @State private var pinHovered = false
+    @State private var closeHovered = false
 
     var body: some View {
         // One 22 pt row, everything centred on it. The P lines up with the status squares below
@@ -190,6 +197,24 @@ struct Header: View {
                 .onTapGesture {
                     pinned.toggle()
                     Tooltip.shared.hide()
+                }
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.white.opacity(closeHovered ? 0.08 : 0)))
+                .contentShape(Circle())
+                .onHover { inside in
+                    closeHovered = inside
+                    if inside {
+                        Tooltip.shared.show(title: "Затвори панела", detail: "отваря се от билетчето в лентата горе")
+                    } else {
+                        Tooltip.shared.hide()
+                    }
+                }
+                .onTapGesture {
+                    Tooltip.shared.hide()
+                    hidden = true
                 }
         }
         .frame(height: 22)

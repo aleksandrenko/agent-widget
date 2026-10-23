@@ -14,7 +14,9 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 - Pin in the header (right of the name): pinned floats above every window (green pin), unpinned sits on the desktop.
 
 ## Menu bar
-- Template icon: a ticket (rounded outline, a notch on each side, dashed tear line), 18 × 13 pt like the keyboard-language icon. Click: panel above all windows until the next click elsewhere. Right-click: pin, refresh now, move to this screen, quit.
+- Template icon: a ticket (rounded shape, a notch on each side, dashed tear line), 18 × 13 pt like the keyboard-language icon; outlined while the panel is open, filled while it is closed.
+- Any click opens a menu: Open / Close panel, summary lines (tasks · working · waiting, Slack, next meeting, e2e), pin, refresh now, move to this screen, quit.
+- Header: ✕ after the pin closes the panel (remembered across restarts).
 
 ## Task row (one list, hairline separators, light hover on the whole row)
 - 32 pt status square, icon only, glossy: light-to-dark gradient, light top edge, glow in its colour.
