@@ -600,30 +600,24 @@ struct SlackRow: View {
 
 // MARK: - Usage pill
 
-/// What's left of the Claude 5-hour session limit, drawn like a phone battery (about 24 × 11 pt):
-/// a rounded outline with a terminal nub, the charge draining as the limit is used.
-/// Green, then orange under 30% left, red under 10%.
+/// How much of the Claude 5-hour session limit is used: a small rounded outline (20 × 11 pt) that
+/// fills up as the limit is used, green, then orange past 70%, red past 90%. Hover shows the %.
 struct UsagePill: View {
     var usage: Snapshot.Usage
 
     var body: some View {
-        let left = min(1, max(0, 1 - usage.fiveHour.percent / 100))
-        let color = left < 0.1 ? Palette.hex(0xF87171) : left < 0.3 ? Palette.hex(0xFB923C) : Palette.accent
-        HStack(spacing: 1) {
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(color)
-                    .frame(width: max(2, 18 * left))
-                    .padding(2)
-            }
-            .frame(width: 22, height: 11)
-            RoundedRectangle(cornerRadius: 1, style: .continuous)
-                .fill(Color.white.opacity(0.55))
-                .frame(width: 1.5, height: 4)
+        let used = min(1, max(0, usage.fiveHour.percent / 100))
+        let color = used >= 0.9 ? Palette.hex(0xF87171) : used >= 0.7 ? Palette.hex(0xFB923C) : Palette.accent
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(color)
+                .frame(width: max(2, 16 * used))
+                .padding(2)
         }
-        .hoverTip("\(100 - Int(usage.fiveHour.percent))%")  // just the charge left, like a battery
+        .frame(width: 20, height: 11)
+        .hoverTip("\(Int(usage.fiveHour.percent))%")
     }
 }
 

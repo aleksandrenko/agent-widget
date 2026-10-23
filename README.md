@@ -39,7 +39,7 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 - **`e2e`**: green or red by the last run of the e2e workflow you configure (for example the full suite every release build goes through), with a blinking clock while one is running. Hover it for how many of the last 10 passed; click it to open the run.
 - **PRs**: PRs you opened this week / this month.
 - **Tickets**: your open Jira tickets / tickets done this month. Appears once Jira answers (run `setup-jira-token.sh`).
-- **Claude battery**: what's left of your Claude 5-hour session limit, drawn like a phone battery; hover for the %. Filled by a Claude scheduled task (`birdwatcher-usage`, every 15 min on weekdays), because only a Claude session can read the plan limits.
+- **Claude limit**: how much of your Claude 5-hour session limit is used, a small bar that fills up green → orange → red; hover for the %. Filled by a Claude scheduled task (`birdwatcher-usage`, every 15 min on weekdays), because only a Claude session can read the plan limits.
 - **Calendar**: today's meeting count. Ten minutes before a meeting it turns into an orange `3 · 4 мин` pill; during a meeting it turns into a red `3 · в среща` pill. Click it to join the call.
 - **Week bar**: the panel's bottom edge fills in your accent colour from Monday 09:00 to Friday 18:00. Hover it for the day and the week's progress.
 

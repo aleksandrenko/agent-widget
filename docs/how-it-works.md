@@ -50,7 +50,7 @@ The stage of a task is the stage of its least advanced live PR.
 - **Meetings**: today's events with attendees that are not all-day, not *free*, and not declined by you. The call link is the event URL, or the first Meet / Zoom / Teams link in its location or notes.
 
 ## Claude limits
-Only a Claude session can read the plan limits, so a Claude scheduled task (`birdwatcher-usage`, every 15 minutes on weekdays 9:00–18:59) calls the app's usage tool and writes `~/.agent-widget/usage.json`. The collector passes it on; older than 3 hours, the battery hides.
+Only a Claude session can read the plan limits, so a Claude scheduled task (`birdwatcher-usage`, every 15 minutes on weekdays 9:00–18:59) calls the app's usage tool and writes `~/.agent-widget/usage.json`. The collector passes it on; older than 3 hours, the bar hides.
 
 ## Slack
 The number on Slack's Dock icon (`lsappinfo info -only StatusLabel Slack`) is your unread DMs plus mentions. A bare `•` means only channel unreads and is ignored.
