@@ -307,10 +307,12 @@ def jira(extra_keys):
     issues = {i['key']: dict(title=i['fields']['summary'], status=i['fields']['status']['name'], url=JIRA + '/browse/' + i['key'])
               for i in data.get('issues', [])}
     week, month = week_month()
-    closed = lambda since: len(get('/rest/api/3/search/jql?' + urllib.parse.urlencode(dict(maxResults=100, fields='status', jql=(
-        f'assignee = currentUser() AND (status changed to ({statuses(CONFIG["jira"]["doneStatuses"])}) after "{since}" '
-        f'OR resolved >= "{since}")')))).get('issues', []))
-    return issues, dict(week=closed(week), month=closed(month))
+    count = lambda jql: len(get('/rest/api/3/search/jql?' + urllib.parse.urlencode(dict(maxResults=100, fields='status', jql=jql)))
+                            .get('issues', []))
+    done = statuses(CONFIG['jira']['doneStatuses'])
+    closed = lambda since: count(f'assignee = currentUser() AND (status changed to ({done}) after "{since}" OR resolved >= "{since}")')
+    still_open = count(f'assignee = currentUser() AND statusCategory != Done AND status not in ({done})')
+    return issues, dict(open=still_open, week=closed(week), month=closed(month))
 
 
 def jira_state(status):
@@ -436,7 +438,7 @@ def main(local=False):
         unread = slack()
     except Exception as e:
         unread, errors['slack'] = [], str(e)[-200:]
-    stats = dict(prs=counts, jiraClosed=closed, e2e=e2e_state)
+    stats = dict(prs=counts, jira=closed, e2e=e2e_state)
     json.dump(dict(at=NOW, pulls=pulls, issues=issues, slack=unread, stats=stats, errors=errors), open(REMOTE_CACHE, 'w'))
     write(dict(generatedAt=NOW, brand=CONFIG['brand'], tasks=build(sess, pulls, issues, 'jira' in errors), slack=unread,
                stats=stats, errors=errors))

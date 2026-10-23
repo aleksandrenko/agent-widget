@@ -73,10 +73,6 @@
    "week": 14,
    "month": 42
   },
-  "jiraClosed": {
-   "week": 5,
-   "month": 18
-  },
   "e2e": {
    "ok": true,
    "last": "e2e: full suite",
@@ -85,6 +81,11 @@
    "running": 1,
    "passed": 8,
    "recent": 10
+  },
+  "jira": {
+   "open": 7,
+   "week": 5,
+   "month": 18
   }
  },
  "errors": {},

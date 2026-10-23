@@ -17,8 +17,15 @@ struct Snapshot: Decodable {
 
     struct Stats: Decodable {
         var prs: Counts?
-        var jiraClosed: Counts?
+        var jira: JiraCounts?
         var e2e: E2E?
+    }
+
+    /// My open tickets, and the ones I closed this week and this month.
+    struct JiraCounts: Decodable {
+        var open: Int
+        var week: Int
+        var month: Int
     }
 
     struct Counts: Decodable {

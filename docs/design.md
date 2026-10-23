@@ -25,12 +25,12 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 - Title (13 pt), below it Jira key · note (11 pt), below that a 150 pt, 2 pt stage bar:
   grey track, lighter grey fill. Stages: code, pushed, AI review, CI build, staging, prod.
   Hover: stage under the cursor and whether it's done, current or next.
-- Jira and GitHub logos coloured by status, each with its own light hover circle, tooltip
-  explaining the colour, and its own click (ticket / PR). Row click opens the Claude session.
+- GitHub logo coloured by the PR's status, with its own light hover circle, tooltip explaining the
+  colour, and its own click (the PR). Row click opens the Claude session. No Jira icon on rows.
 
 ## Footer (11 pt)
 - `e2e` text, green/red by the last run of the configured e2e workflow; blinking round clock while one runs. Click → that run.
-- PRs created week/month, Jira tickets closed week/month (hover explains).
+- PRs created week/month; Jira tickets open / closed this month (hidden without Jira).
 - Right: calendar with today's meeting count. 10 min before a meeting: orange pill "3 · 4 мин";
   during one: red pill "3 · в среща" with a blinking dot. Click → meeting link, else Google Calendar.
 

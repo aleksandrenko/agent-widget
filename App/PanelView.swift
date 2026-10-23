@@ -181,10 +181,10 @@ struct Header: View {
                 .font(.system(size: 10, weight: .semibold))
                 .rotationEffect(.degrees(45))
                 .foregroundStyle(pinned ? Palette.accent : .white.opacity(0.7))
-                .frame(width: 22, height: 22)
+                .frame(width: 18, height: 22)
                 .background(Circle().fill(Color.white.opacity(pinHovered ? 0.08 : 0)))
                 .contentShape(Circle())
-                .padding(.leading, 4)
+                .padding(.leading, 10)  // the two buttons sit together, apart from the name
                 .onHover { inside in
                     pinHovered = inside
                     if inside {
@@ -201,7 +201,7 @@ struct Header: View {
             Image(systemName: "xmark")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.white.opacity(0.7))
-                .frame(width: 22, height: 22)
+                .frame(width: 18, height: 22)
                 .background(Circle().fill(Color.white.opacity(closeHovered ? 0.08 : 0)))
                 .contentShape(Circle())
                 .onHover { inside in
@@ -218,7 +218,7 @@ struct Header: View {
                 }
         }
         .frame(height: 22)
-        .padding(EdgeInsets(top: 9, leading: 10, bottom: 7, trailing: 9))
+        .padding(EdgeInsets(top: 9, leading: 10, bottom: 7, trailing: 11))
     }
 
     static let mark: NSImage? = {
@@ -374,11 +374,7 @@ struct TaskRow: View {
                 StageLine(task: task).frame(width: 150).padding(.top, 2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 3) {  // icons sit closer to each other than to the text
-                IconButton(name: "jira", color: Palette.jira(task.jira?.state ?? "none").color,
-                           tip: ("Jira: \(task.jira?.label ?? "няма тикет")", task.jira.map { Palette.jira($0.state).meaning } ?? "тъмно = няма тикет")) {
-                    task.jira.map { open($0.url) }
-                }
+            HStack(spacing: 3) {
                 IconButton(name: "github", color: Palette.github(task.github?.state ?? "none").color,
                            tip: ("GitHub: \(githubTitle)", Palette.github(task.github?.state ?? "none").meaning)) {
                     task.github.map { open($0.url) }
@@ -601,7 +597,7 @@ struct Footer: View {
             HStack(spacing: 14) {
                 if stats.e2e != nil || errors["e2e"] != nil { e2e }
                 counter(icon: "arrow.triangle.pull", counts: stats.prs, title: "Твоите PR-и", error: errors["prCounts"])
-                counter(icon: "ticket", counts: stats.jiraClosed, title: "Затворени Jira тикети", error: errors["jira"])
+                if stats.jira != nil { jiraCounter }  // hidden until Jira answers
                 Spacer(minLength: 0)
                 calendar(context.date)
             }
@@ -647,6 +643,20 @@ struct Footer: View {
         if state.running > 0 { lines.append("\(state.running) вървят в момента") }
         lines.append(state.running > 0 ? "клик → текущият run" : "клик → последният run")
         return lines.joined(separator: "\n")
+    }
+
+    /// Open / closed this month, like the PR counter.
+    private var jiraCounter: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "ticket")
+            if let jira = stats.jira {
+                Text("\(jira.open)") + Text("/\(jira.month)").foregroundColor(.white.opacity(0.45))
+            } else {
+                Text("–")
+            }
+        }
+        .hoverTip("Твоите Jira тикети",
+                  stats.jira.map { "\($0.open) отворени · \($0.month) затворени този месец" } ?? errors["jira"])
     }
 
     private func counter(icon: String, counts: Snapshot.Counts?, title: String, error: String?) -> some View {

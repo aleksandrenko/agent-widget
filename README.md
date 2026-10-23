@@ -28,7 +28,7 @@ Sessions, PRs and tickets that share a Jira key (`WEB-1201`) are one task. Each 
 - **Stage bar**: how far the work has got.
   `code → pushed → AI review → CI build → on staging → on prod`
   Hover any point of the bar to see that stage and whether it is done, running or next.
-- **Jira and GitHub icons**, coloured by status: grey To Do, blue In Progress, violet In Review, green On staging, red blocked or failing. Hover an icon to see what its colour means; click it to open the ticket or the PR.
+- **GitHub icon**, coloured by the PR's status: grey draft, light blue waiting for AI review, yellow CI running, red CI failing or a conflict, green ready to merge, violet merged. Hover it to see what its colour means; click it to open the PR.
 
 Click a row to jump straight into that Claude session.
 
@@ -38,7 +38,7 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 ### Footer
 - **`e2e`**: green or red by the last run of the e2e workflow you configure (for example the full suite every release build goes through), with a blinking clock while one is running. Hover it for how many of the last 10 passed; click it to open the run.
 - **PRs**: PRs you opened this week / this month.
-- **Tickets**: Jira tickets you closed this week / this month.
+- **Tickets**: your open Jira tickets / closed this month (hidden until Jira is set up).
 - **Calendar**: today's meeting count. Ten minutes before a meeting it turns into an orange `3 · 4 мин` pill; during a meeting it turns into a red `3 · в среща` pill. Click it to join the call.
 - **Week bar**: the panel's bottom edge fills in your accent colour from Monday 09:00 to Friday 18:00. Hover it for the day and the week's progress.
 
