@@ -21,7 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pinWatch: AnyCancellable?
     private var statusItem: NSStatusItem?
     private var hiddenWatch: AnyCancellable?
-    private var pausedWatch: AnyCancellable?
 
     static func main() {
         let app = NSApplication.shared
@@ -72,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         collect()
         timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, !self.store.paused else { return }  // closed: no updates until it's opened again
+                guard let self, !self.store.hidden else { return }  // out of sight: no updates until it's opened again
                 self.ticks += 1
                 self.collect(local: self.ticks % 4 != 0)
                 if self.ticks % 4 == 0 { self.meetings.reload() }
@@ -128,12 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 panel.orderOut(nil)
                 Tooltip.shared.hide()
             } else {
-                bringOnScreen()
+                bringOnScreen()  // back onto a screen if it was left on a display that's gone
                 panel.orderFrontRegardless()
+                refreshNow()  // it may have been hidden for a while
             }
-        }
-        pausedWatch = store.$paused.dropFirst().sink { [weak self] paused in
-            if !paused { self?.refreshNow() }  // it may have been closed for a while
         }
     }
 
@@ -218,7 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(NSMenuItem(title: L("Отвори панела", "Open panel"), action: #selector(openPanel), keyEquivalent: ""))
         } else {
             menu.addItem(NSMenuItem(title: L("Скрий панела", "Hide panel"), action: #selector(hidePanel), keyEquivalent: ""))
-            menu.addItem(NSMenuItem(title: L("Затвори панела (спира обновяването)", "Close panel (stops updates)"), action: #selector(closePanel), keyEquivalent: ""))
         }
         menu.addItem(.separator())
         for line in summary() {
@@ -230,7 +226,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pin = NSMenuItem(title: L("Закачи над всички прозорци", "Pin above all windows"), action: #selector(togglePin), keyEquivalent: "")
         pin.state = store.pinned ? .on : .off
         menu.addItem(pin)
-        menu.addItem(NSMenuItem(title: L("Обнови сега", "Refresh now"), action: #selector(refreshNow), keyEquivalent: ""))
         let language = NSMenuItem(title: L("Език", "Language"), action: nil, keyEquivalent: "")
         language.submenu = NSMenu()
         for lang in Lang.allCases {
@@ -241,10 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             language.submenu?.addItem(item)
         }
         menu.addItem(language)
-        menu.addItem(NSMenuItem(title: L("Премести на този екран", "Move to this screen"), action: #selector(moveHere), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: L("За BirdWatcher", "About BirdWatcher"), action: #selector(about), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: L("Спри приложението", "Quit BirdWatcher"), action: #selector(quit), keyEquivalent: ""))
         for item in menu.items where item.action != nil { item.target = self }
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)  // opens the menu under the icon
@@ -258,7 +251,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let waiting = tasks.filter { $0.agent == "waiting" }.count
         let working = tasks.filter { $0.agent == "working" }.count
         var lines = [L("\(tasks.count) задачи · \(working) работят · \(waiting) чакат теб", "\(tasks.count) tasks · \(working) working · \(waiting) waiting for you")]
-        if store.paused { lines.append(L("Обновяването е спряно", "Updates are paused")) }
         if let unread = snapshot.slack?.reduce(0, { $0 + $1.count }), unread > 0 { lines.append(L("Slack: \(unread) непрочетени", "Slack: \(unread) unread")) }
         let now = Date()
         if let meeting = meetings.current(at: now) {
@@ -272,17 +264,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openPanel() {
         store.hidden = false
-        store.paused = false
     }
 
-    /// Out of sight, still up to date.
+    /// Out of sight, and no updates until it's opened again.
     @objc private func hidePanel() {
-        store.hidden = true
-    }
-
-    /// Out of sight and no updates until it's opened again.
-    @objc private func closePanel() {
-        store.paused = true
         store.hidden = true
     }
 
@@ -293,8 +278,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Back onto a screen if the panel was left on a display that's gone.
-    private func bringOnScreen(force: Bool = false) {
-        guard force || !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(panel.frame) }) else { return }
+    private func bringOnScreen() {
+        guard !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(panel.frame) }) else { return }
         let screen = (NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main)?.visibleFrame ?? .zero
         panel.setFrameTopLeftPoint(NSPoint(x: screen.minX + 16, y: screen.maxY - 12))
     }
@@ -303,15 +288,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.pinned.toggle()
     }
 
-    @objc private func refreshNow() {
+    private func refreshNow() {
         collect()
         meetings.reload()
-    }
-
-    @objc private func moveHere() {
-        openPanel()
-        bringOnScreen(force: true)
-        panel.orderFrontRegardless()
     }
 
     /// The standard About window, with what the app is for.
@@ -341,10 +320,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let lang = (sender.representedObject as? String).flatMap(Lang.init(rawValue:)) else { return }
         store.language = lang
         refreshNow()
-    }
-
-    @objc private func quit() {
-        NSApp.terminate(nil)
     }
 
     private func savedTopLeft() -> NSPoint {

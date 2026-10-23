@@ -46,7 +46,7 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 ### Pin and the menu bar icon
 The pin in the header moves the panel above every window, including full-screen apps. Click it again to send the panel back to the desktop.
 
-The ✕ in the header closes the panel. The binoculars in the menu bar show its state, clear lenses while the panel is open and covered while it is closed; they blink while someone wants you (an agent waiting for your answer, or unread Slack). Click it for a menu with **Open / Hide / Close panel**, a short summary (tasks, who's waiting for you, Slack, the next meeting, e2e), **Pin above all windows**, **Refresh now**, **Language** (Български / English), **Move to this screen** (when the panel was left on a display that's gone), **About** and **Stop the app**.
+The ✕ in the header hides the panel; while it's hidden nothing updates, and it refreshes the moment you open it again. The binoculars in the menu bar show its state, clear lenses while the panel is open and covered while it is hidden; they blink while someone wants you (an agent waiting for your answer, or unread Slack). Click them for a menu with **Open / Hide panel**, a short summary (tasks, who's waiting for you, Slack, the next meeting, e2e), **Pin above all windows**, **Language** (Български / English) and **About**. To quit, use Activity Monitor or `pkill BirdWatcher`; open it again from Spotlight, Apps or the Desktop icon.
 
 ---
 

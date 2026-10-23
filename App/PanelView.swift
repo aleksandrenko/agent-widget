@@ -24,11 +24,6 @@ final class Store: ObservableObject {
         didSet { UserDefaults.standard.set(hidden, forKey: Self.hiddenKey) }
     }
     static let hiddenKey = "panelHidden"
-    /// Closed (not just hidden): no updates until it's opened again.
-    @Published var paused = !Demo.isOn && UserDefaults.standard.bool(forKey: pausedKey) {
-        didSet { UserDefaults.standard.set(paused, forKey: Self.pausedKey) }
-    }
-    static let pausedKey = "updatesPaused"
 }
 
 // MARK: - Palette
@@ -100,7 +95,7 @@ struct PanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Header(brand: store.snapshot?.brand, pinned: $store.pinned, close: { store.paused = true; store.hidden = true },
+            Header(brand: store.snapshot?.brand, pinned: $store.pinned, close: { store.hidden = true },
                    refresh: refresh)
             if let snapshot = store.snapshot {
                 VStack(spacing: 0) {
@@ -229,7 +224,7 @@ struct Header: View {
                 .onHover { inside in
                     closeHovered = inside
                     if inside {
-                        Tooltip.shared.show(title: L("Затвори панела", "Close panel"), detail: L("спира и обновяването; отваря се от билетчето горе", "also stops updates; open it again from the menu bar"))
+                        Tooltip.shared.show(title: L("Затвори панела", "Close panel"), detail: L("и спира обновяването; отваря се от бинокъла горе", "and stops updates; open it again from the menu bar"))
                     } else {
                         Tooltip.shared.hide()
                     }
