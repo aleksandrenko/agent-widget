@@ -18,7 +18,7 @@ TRANSCRIPTS = os.path.join(HOME, '.claude/projects')
 CONFIG_FILE = os.environ.get('AGENT_WIDGET_CONFIG') or os.path.join(OUT_DIR, 'config.json')
 DEFAULTS = dict(
     brand=dict(name='Agent Widget', accent='#3DDC84'),
-    jira=dict(site='', projects=[], activeStatuses=['In Progress', 'In Review'], doneStatuses=['Done']),
+    jira=dict(site='', projects=[], activeStatuses=['In Progress', 'In Review']),
     e2e=dict(repo='', workflow='', titlePrefix=''),
     prodComment='deployed to production',
 )
@@ -309,9 +309,9 @@ def jira(extra_keys):
     week, month = week_month()
     count = lambda jql: len(get('/rest/api/3/search/jql?' + urllib.parse.urlencode(dict(maxResults=100, fields='status', jql=jql)))
                             .get('issues', []))
-    done = statuses(CONFIG['jira']['doneStatuses'])
-    closed = lambda since: count(f'assignee = currentUser() AND (status changed to ({done}) after "{since}" OR resolved >= "{since}")')
-    still_open = count(f'assignee = currentUser() AND statusCategory != Done AND status not in ({done})')
+    # Done means Jira's Done category: a ticket on staging still counts as open.
+    closed = lambda since: count(f'assignee = currentUser() AND statusCategory = Done AND statusCategoryChangedDate >= "{since}"')
+    still_open = count('assignee = currentUser() AND statusCategory != Done')
     return issues, dict(open=still_open, week=closed(week), month=closed(month))
 
 

@@ -645,7 +645,7 @@ struct Footer: View {
         return lines.joined(separator: "\n")
     }
 
-    /// Open / closed this month, like the PR counter.
+    /// Open / Done this month, like the PR counter.
     private var jiraCounter: some View {
         HStack(spacing: 4) {
             Image(systemName: "ticket")
@@ -656,7 +656,7 @@ struct Footer: View {
             }
         }
         .hoverTip("Твоите Jira тикети",
-                  stats.jira.map { "\($0.open) отворени · \($0.month) затворени този месец" } ?? errors["jira"])
+                  stats.jira.map { "\($0.open) отворени · \($0.month) Done този месец" } ?? errors["jira"])
     }
 
     private func counter(icon: String, counts: Snapshot.Counts?, title: String, error: String?) -> some View {
