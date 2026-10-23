@@ -598,6 +598,35 @@ struct SlackRow: View {
     }
 }
 
+// MARK: - Usage pill
+
+/// What's left of the Claude 5-hour session limit, drawn like a phone battery (about 24 × 11 pt):
+/// a rounded outline with a terminal nub, the charge draining as the limit is used.
+/// Green, then orange under 30% left, red under 10%.
+struct UsagePill: View {
+    var usage: Snapshot.Usage
+
+    var body: some View {
+        let left = min(1, max(0, 1 - usage.fiveHour.percent / 100))
+        let color = left < 0.1 ? Palette.hex(0xF87171) : left < 0.3 ? Palette.hex(0xFB923C) : Palette.accent
+        HStack(spacing: 1) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(color)
+                    .frame(width: max(2, 18 * left))
+                    .padding(2)
+            }
+            .frame(width: 22, height: 11)
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(Color.white.opacity(0.55))
+                .frame(width: 1.5, height: 4)
+        }
+        .hoverTip("\(100 - Int(usage.fiveHour.percent))%")  // just the charge left, like a battery
+    }
+}
+
 // MARK: - Footer
 
 struct Footer: View {
@@ -617,6 +646,7 @@ struct Footer: View {
                 counter(icon: "arrow.triangle.pull", counts: stats.prs, title: "Твоите PR-и", error: errors["prCounts"])
                 if stats.jira != nil { jiraCounter }  // appears once Jira answers (needs the API token)
                 Spacer(minLength: 0)
+                if let ai = stats.ai { UsagePill(usage: ai) }
                 calendar(context.date)
             }
             .font(.system(size: 11))

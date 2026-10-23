@@ -19,6 +19,25 @@ struct Snapshot: Decodable {
         var prs: Counts?
         var jira: JiraCounts?
         var e2e: E2E?
+        var ai: Usage?
+    }
+
+    /// Claude plan limits, from the birdwatcher-usage scheduled task (refreshed every 30 min).
+    struct Usage: Decodable {
+        var at: Double
+        var fiveHour: Window
+        var weekly: Window?
+
+        struct Window: Decodable {
+            var percent: Double
+            var resetsAt: String
+
+            var resets: Date? {
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                return f.date(from: resetsAt) ?? ISO8601DateFormatter().date(from: resetsAt)
+            }
+        }
     }
 
     /// My open tickets, and the ones I closed this week and this month.

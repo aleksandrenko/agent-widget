@@ -47,6 +47,8 @@ PR_REF = re.compile(r'#(\d{3,6})\b')
 PR_URL = re.compile(r'github\.com/[\w.-]+/([\w.-]+)/pull/(\d+)')
 REFS_CACHE = os.path.join(OUT_DIR, 'refs-cache.json')
 REMOTE_CACHE = os.path.join(OUT_DIR, 'remote-cache.json')
+USAGE = os.path.join(OUT_DIR, 'usage.json')  # Claude plan limits, written by the birdwatcher-usage scheduled task
+USAGE_STALE_HOURS = 3
 _refs = json.load(open(REFS_CACHE)) if os.path.exists(REFS_CACHE) else {}
 
 # Stages, in order. A task sits at one of them; 6 means all done (on prod).
@@ -280,6 +282,17 @@ def slack():
                  count=int(match.group(1)), url='slack://open')]
 
 
+def usage():
+    """Claude plan limits from the scheduled task's file; None when missing or too old to trust."""
+    if not os.path.exists(USAGE):
+        return None
+    data = json.load(open(USAGE))
+    at = dt.datetime.fromisoformat(data['at'].replace('Z', '+00:00')).timestamp()
+    if 'fiveHour' not in data or NOW - at > USAGE_STALE_HOURS * 3600:
+        return None
+    return dict(data, at=at)
+
+
 def keychain(service):
     try:
         return sh(['security', 'find-generic-password', '-a', os.environ.get('USER', ''), '-s', service, '-w']).strip()
@@ -414,7 +427,7 @@ def main(local=False):
         except Exception:
             unread = remote['slack']
         write(dict(generatedAt=NOW, brand=CONFIG['brand'], tasks=build(sess, remote['pulls'], remote['issues'], 'jira' in remote['errors']),
-                   slack=unread, stats=remote['stats'], errors=remote['errors']))
+                   slack=unread, stats=dict(remote['stats'], ai=usage()), errors=remote['errors']))
         return
     errors = {}
 
@@ -441,7 +454,7 @@ def main(local=False):
         unread = slack()
     except Exception as e:
         unread, errors['slack'] = [], str(e)[-200:]
-    stats = dict(prs=counts, jira=closed, e2e=e2e_state)
+    stats = dict(prs=counts, jira=closed, e2e=e2e_state, ai=usage())
     json.dump(dict(at=NOW, pulls=pulls, issues=issues, slack=unread, stats=stats, errors=errors), open(REMOTE_CACHE, 'w'))
     write(dict(generatedAt=NOW, brand=CONFIG['brand'], tasks=build(sess, pulls, issues, 'jira' in errors), slack=unread,
                stats=stats, errors=errors))
