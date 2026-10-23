@@ -1,5 +1,5 @@
-// Draws the app icon: a dark glass tile with the panel's corner glow and a green ticket with a small
-// eye on it (BirdWatcher), the ticket of the menu bar icon. Writes App/AppIcon.icns.
+// Draws the app icon: a dark glass tile with the panel's corner glow and minimal green binoculars
+// (BirdWatcher). Writes App/AppIcon.icns.
 //
 //     swift tools/icon.swift
 import AppKit
@@ -43,51 +43,31 @@ func draw(_ s: CGFloat) {
     shape.stroke()
     NSGraphicsContext.restoreGraphicsState()
 
-    // The ticket, as in the menu bar, in Payhawk green.
-    let w = s * 520 / 1024, h = s * 370 / 1024
-    let r = NSRect(x: (s - w) / 2, y: (s - h) / 2, width: w, height: h)
-    let corner = s * 64 / 1024, notch = s * 62 / 1024
-    let ticket = NSBezierPath()
-    ticket.move(to: NSPoint(x: r.minX + corner, y: r.minY))
-    ticket.line(to: NSPoint(x: r.maxX - corner, y: r.minY))
-    ticket.appendArc(withCenter: NSPoint(x: r.maxX - corner, y: r.minY + corner), radius: corner, startAngle: 270, endAngle: 360)
-    ticket.line(to: NSPoint(x: r.maxX, y: r.midY - notch))
-    ticket.appendArc(withCenter: NSPoint(x: r.maxX, y: r.midY), radius: notch, startAngle: 270, endAngle: 90, clockwise: true)
-    ticket.line(to: NSPoint(x: r.maxX, y: r.maxY - corner))
-    ticket.appendArc(withCenter: NSPoint(x: r.maxX - corner, y: r.maxY - corner), radius: corner, startAngle: 0, endAngle: 90)
-    ticket.line(to: NSPoint(x: r.minX + corner, y: r.maxY))
-    ticket.appendArc(withCenter: NSPoint(x: r.minX + corner, y: r.maxY - corner), radius: corner, startAngle: 90, endAngle: 180)
-    ticket.line(to: NSPoint(x: r.minX, y: r.midY + notch))
-    ticket.appendArc(withCenter: NSPoint(x: r.minX, y: r.midY), radius: notch, startAngle: 90, endAngle: 270, clockwise: true)
-    ticket.line(to: NSPoint(x: r.minX, y: r.minY + corner))
-    ticket.appendArc(withCenter: NSPoint(x: r.minX + corner, y: r.minY + corner), radius: corner, startAngle: 180, endAngle: 270)
-    ticket.close()
+    // Binoculars, the minimal way: two thick rings, a bridge and two eyepiece ticks, in Payhawk green.
+    // Drawn on a 64-unit grid (y up), centred on the tile.
+    let u = s * 11.7 / 1024
+    let p = { (x: CGFloat, y: CGFloat) in NSPoint(x: s / 2 + (x - 32) * u, y: s / 2 + (35 - y) * u) }  // the rings carry the weight: centre on them
+    let green = color(0x3DDC84)
     NSGraphicsContext.saveGraphicsState()
     let glow = NSShadow()
     glow.shadowColor = color(0x3DDC84, 0.6)
     glow.shadowBlurRadius = s * 40 / 1024
     glow.set()
-    ticket.lineWidth = s * 40 / 1024
-    ticket.lineJoinStyle = .round
-    color(0x3DDC84).setStroke()
-    ticket.stroke()
+    green.setStroke()
+    for cx: CGFloat in [19, 45] {
+        let c = p(cx, 38)
+        let ring = NSBezierPath(ovalIn: NSRect(x: c.x - 11 * u, y: c.y - 11 * u, width: 22 * u, height: 22 * u))
+        ring.lineWidth = 5.5 * u
+        ring.stroke()
+    }
+    let lines = NSBezierPath()
+    lines.move(to: p(30, 34)); lines.line(to: p(34, 34))
+    lines.move(to: p(14, 22)); lines.line(to: p(17, 16))
+    lines.move(to: p(50, 22)); lines.line(to: p(47, 16))
+    lines.lineWidth = 5 * u
+    lines.lineCapStyle = .round
+    lines.stroke()
     NSGraphicsContext.restoreGraphicsState()
-    // Instead of the tear line, a small eye on the right: the watcher.
-    let eye = NSRect(x: r.minX + w * 0.66 - s * 76 / 1024, y: r.midY - s * 44 / 1024, width: s * 152 / 1024, height: s * 88 / 1024)
-    let almond = NSBezierPath()
-    almond.move(to: NSPoint(x: eye.minX, y: eye.midY))
-    almond.curve(to: NSPoint(x: eye.maxX, y: eye.midY), controlPoint1: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.maxY + eye.height * 0.18),
-                 controlPoint2: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.maxY + eye.height * 0.18))
-    almond.curve(to: NSPoint(x: eye.minX, y: eye.midY), controlPoint1: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.minY - eye.height * 0.18),
-                 controlPoint2: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.minY - eye.height * 0.18))
-    almond.close()
-    almond.lineWidth = s * 26 / 1024
-    almond.lineJoinStyle = .round
-    color(0x3DDC84).setStroke()
-    almond.stroke()
-    let pupil = s * 22 / 1024
-    color(0x3DDC84).setFill()
-    NSBezierPath(ovalIn: NSRect(x: eye.midX - pupil, y: eye.midY - pupil, width: pupil * 2, height: pupil * 2)).fill()
 }
 
 for size in sizes {

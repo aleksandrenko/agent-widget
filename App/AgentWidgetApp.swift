@@ -117,9 +117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         item.button?.toolTip = "BirdWatcher"
         statusItem = item
+        snapshotWatch = store.$snapshot.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.updateBlink() }
+        }
         hiddenWatch = store.$hidden.sink { [weak self] hidden in
             guard let self else { return }
             statusItem?.button?.image = Self.menuBarIcon(filled: hidden)
+            self.updateBlink()
             if hidden {
                 panel.orderOut(nil)
                 Tooltip.shared.hide()
@@ -135,7 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// A ticket: a rounded shape with a notch on each side and a dashed tear line, 18 × 13 pt like the
     /// keyboard-language icon. A template, so macOS tints it like the other menu bar icons.
-    private static func menuBarIcon(filled: Bool) -> NSImage {
+    /// `open`: how far the eye is open, 1 = open, 0 = shut (for the blink).
+    private static func menuBarIcon(filled: Bool, open: CGFloat = 1) -> NSImage {
         let image = NSImage(size: NSSize(width: 20, height: 16), flipped: false) { rect in
             let r = rect.insetBy(dx: 1, dy: 1.5)
             let corner: CGFloat = 2.5, notch: CGFloat = 2.4
@@ -158,14 +163,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ticket.lineJoinStyle = .round
             NSColor.black.set()
             filled ? ticket.fill() : ticket.stroke()
-            // A small eye on the right (BirdWatcher), cut out of the filled ticket.
+            // A small eye on the right (BirdWatcher), cut out of the filled ticket. The lids close towards
+            // the middle as `open` goes to 0.
             let eye = NSRect(x: r.minX + r.width * 0.6 - 3.4, y: r.midY - 2.1, width: 6.8, height: 4.2)
+            let lid = (eye.height / 2 + 0.8) * max(open, 0.08)
             let almond = NSBezierPath()
             almond.move(to: NSPoint(x: eye.minX, y: eye.midY))
-            almond.curve(to: NSPoint(x: eye.maxX, y: eye.midY), controlPoint1: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.maxY + 0.8),
-                         controlPoint2: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.maxY + 0.8))
-            almond.curve(to: NSPoint(x: eye.minX, y: eye.midY), controlPoint1: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.minY - 0.8),
-                         controlPoint2: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.minY - 0.8))
+            almond.curve(to: NSPoint(x: eye.maxX, y: eye.midY), controlPoint1: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.midY + lid),
+                         controlPoint2: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.midY + lid))
+            almond.curve(to: NSPoint(x: eye.minX, y: eye.midY), controlPoint1: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.midY - lid),
+                         controlPoint2: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.midY - lid))
             almond.close()
             almond.lineWidth = 1.2
             let pupil = NSBezierPath(ovalIn: NSRect(x: eye.midX - 1.1, y: eye.midY - 1.1, width: 2.2, height: 2.2))
@@ -173,16 +180,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSGraphicsContext.current?.compositingOperation = .destinationOut
                 almond.fill()
                 NSGraphicsContext.current?.compositingOperation = .sourceOver
-                pupil.fill()
             } else {
                 almond.stroke()
+            }
+            if open > 0.3 {  // the pupil shows only between the lids
+                NSGraphicsContext.saveGraphicsState()
+                almond.addClip()
                 pupil.fill()
+                NSGraphicsContext.restoreGraphicsState()
             }
             return true
         }
         image.isTemplate = true
         image.accessibilityDescription = "BirdWatcher"
         return image
+    }
+
+    // MARK: Blink
+
+    private var blinkTimer: Timer?
+    private var snapshotWatch: AnyCancellable?
+
+    /// Someone wants you: an agent asked you something, or Slack has unread DMs or mentions.
+    private var wantsAttention: Bool {
+        guard let snapshot = store.snapshot else { return false }
+        return snapshot.tasks.contains { $0.agent == "waiting" } || (snapshot.slack?.contains { $0.count > 0 } ?? false)
+    }
+
+    /// While someone wants you, the eye in the menu bar blinks every few seconds.
+    private func updateBlink() {
+        guard wantsAttention else {
+            blinkTimer?.invalidate()
+            blinkTimer = nil
+            statusItem?.button?.image = Self.menuBarIcon(filled: store.hidden)
+            return
+        }
+        guard blinkTimer == nil else { return }
+        blink()
+        blinkTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.blink() }
+        }
+    }
+
+    private func blink() {
+        let frames: [CGFloat] = [0.6, 0.2, 0, 0.2, 0.6, 1]
+        for (i, open) in frames.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06 * Double(i)) { [weak self] in
+                guard let self else { return }
+                statusItem?.button?.image = Self.menuBarIcon(filled: store.hidden, open: open)
+            }
+        }
     }
 
     @objc private func statusItemClicked() {
@@ -206,6 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Обнови сега", action: #selector(refreshNow), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Премести на този екран", action: #selector(moveHere), keyEquivalent: ""))
         menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "За BirdWatcher", action: #selector(about), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Спри приложението", action: #selector(quit), keyEquivalent: ""))
         for item in menu.items where item.action != nil { item.target = self }
         statusItem?.menu = menu
@@ -274,6 +322,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openPanel()
         bringOnScreen(force: true)
         panel.orderFrontRegardless()
+    }
+
+    /// The standard About window, with what the app is for.
+    @objc private func about() {
+        let text = """
+        Следи на десктопа твоите AI агенти, PR-и, Jira, Slack и срещи — и ти казва кой чака теб.
+
+        Всяка задача е един ред: какво прави агентът, докъде е стигнала от кода до prod, \
+        какво е PR-ът. Отдолу: e2e, PR-и и тикети за месеца, срещите днес и докъде е седмицата.
+        """
+        let credits = NSMutableAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor])
+        let link = "github.com/aleksandrenko/agent-widget"
+        credits.append(NSAttributedString(string: "\n\n" + link, attributes: [
+            .font: NSFont.systemFont(ofSize: 11), .link: URL(string: "https://" + link)!]))
+        NSApp.activate()
+        NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "BirdWatcher", .credits: credits])
     }
 
     @objc private func quit() {
