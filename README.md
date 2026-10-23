@@ -5,7 +5,7 @@
 BirdWatcher sits on your wallpaper (or, pinned, above every window) and answers one question at a glance: *what needs me right now?* It joins your Claude Code sessions, your pull requests, your Jira tickets, your Slack, your e2e runs and your calendar into one short list, one row per task.
 
 <p align="center">
-  <img src="docs/screenshots/default.png" width="420" alt="Agent Widget on the desktop: six tasks, two Slack messages, the footer and a meeting in 4 minutes">
+  <img src="docs/screenshots/default.png" width="420" alt="BirdWatcher on the desktop: six tasks, two Slack messages, the footer and a meeting in 4 minutes">
 </p>
 
 | In a meeting | A quiet afternoon |
@@ -113,7 +113,7 @@ Leave a section empty and that part of the panel stays empty (no Jira icons, no 
 
 ```
 ┌─────────────────────────────┐  every 60 s   ┌──────────────────────────────┐
-│  Agent Widget.app (SwiftUI) │ ────────────▶ │ collector/collect.py         │
+│  BirdWatcher.app (SwiftUI)  │ ────────────▶ │ collector/collect.py         │
 │  · glass panel on desktop   │               │  · Claude session files      │
 │  · calendar via EventKit    │ ◀──────────── │  · gh: PRs, reviews, CI, e2e │
 │  · hover tooltips, clicks   │ tasks.json    │  · Jira REST (keychain token)│
@@ -158,7 +158,7 @@ setup-jira-token.sh  Jira token to the keychain
 |---|---|
 | No panel after `build.sh` | It may be on another display. Run `defaults delete com.nikolay.agentwidget panelTopLeft`, then `./build.sh`. |
 | Jira icons grey, ticket count `–` | Set `jira.site` in `config.json`, then run `./setup-jira-token.sh` (the token may have expired). |
-| Calendar shows `–` | Calendar access was denied: *System Settings → Privacy & Security → Calendars → Agent Widget*. |
+| Calendar shows `–` | Calendar access was denied: *System Settings → Privacy & Security → Calendars → BirdWatcher*. |
 | Calendar shows `0` | Add your work Google account in *Internet Accounts*. |
 | Nothing updates | Check `~/.agent-widget/collect.log`, or run `python3 collector/collect.py` by hand. |
 | A session sits under the wrong task | The Jira key comes from the session title, folder, branch, or the keys you typed in it. Mention the right key once in the session. |
