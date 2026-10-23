@@ -158,15 +158,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ticket.lineJoinStyle = .round
             NSColor.black.set()
             filled ? ticket.fill() : ticket.stroke()
-            let tear = NSBezierPath()
-            tear.move(to: NSPoint(x: r.minX + r.width * 0.62, y: r.minY + 3))
-            tear.line(to: NSPoint(x: r.minX + r.width * 0.62, y: r.maxY - 3))  // 7 pt: dash, gap, dash
-            tear.lineWidth = 1.5
-            tear.setLineDash([2.5, 2], count: 2, phase: 0)
+            // A small eye on the right (BirdWatcher), cut out of the filled ticket.
+            let eye = NSRect(x: r.minX + r.width * 0.6 - 3.4, y: r.midY - 2.1, width: 6.8, height: 4.2)
+            let almond = NSBezierPath()
+            almond.move(to: NSPoint(x: eye.minX, y: eye.midY))
+            almond.curve(to: NSPoint(x: eye.maxX, y: eye.midY), controlPoint1: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.maxY + 0.8),
+                         controlPoint2: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.maxY + 0.8))
+            almond.curve(to: NSPoint(x: eye.minX, y: eye.midY), controlPoint1: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.minY - 0.8),
+                         controlPoint2: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.minY - 0.8))
+            almond.close()
+            almond.lineWidth = 1.2
+            let pupil = NSBezierPath(ovalIn: NSRect(x: eye.midX - 1.1, y: eye.midY - 1.1, width: 2.2, height: 2.2))
             if filled {
-                NSGraphicsContext.current?.compositingOperation = .destinationOut  // cut the tear line out of the fill
+                NSGraphicsContext.current?.compositingOperation = .destinationOut
+                almond.fill()
+                NSGraphicsContext.current?.compositingOperation = .sourceOver
+                pupil.fill()
+            } else {
+                almond.stroke()
+                pupil.fill()
             }
-            tear.stroke()
             return true
         }
         image.isTemplate = true

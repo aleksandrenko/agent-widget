@@ -1,5 +1,5 @@
-// Draws the app icon: a dark glass tile with the panel's corner glow and a green ticket,
-// the same ticket as the menu bar icon. Writes App/AppIcon.icns.
+// Draws the app icon: a dark glass tile with the panel's corner glow and a green ticket with a small
+// eye on it (BirdWatcher), the ticket of the menu bar icon. Writes App/AppIcon.icns.
 //
 //     swift tools/icon.swift
 import AppKit
@@ -72,15 +72,22 @@ func draw(_ s: CGFloat) {
     color(0x3DDC84).setStroke()
     ticket.stroke()
     NSGraphicsContext.restoreGraphicsState()
-    let tear = NSBezierPath()
-    tear.move(to: NSPoint(x: r.minX + w * 0.62, y: r.minY + h * 0.22))
-    tear.line(to: NSPoint(x: r.minX + w * 0.62, y: r.maxY - h * 0.22))
-    tear.lineWidth = s * 40 / 1024
-    tear.lineCapStyle = .round
-    let dash = h * 0.56 / 3.4
-    tear.setLineDash([dash * 0.6, dash * 1.6], count: 2, phase: -dash * 0.2)
+    // Instead of the tear line, a small eye on the right: the watcher.
+    let eye = NSRect(x: r.minX + w * 0.66 - s * 76 / 1024, y: r.midY - s * 44 / 1024, width: s * 152 / 1024, height: s * 88 / 1024)
+    let almond = NSBezierPath()
+    almond.move(to: NSPoint(x: eye.minX, y: eye.midY))
+    almond.curve(to: NSPoint(x: eye.maxX, y: eye.midY), controlPoint1: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.maxY + eye.height * 0.18),
+                 controlPoint2: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.maxY + eye.height * 0.18))
+    almond.curve(to: NSPoint(x: eye.minX, y: eye.midY), controlPoint1: NSPoint(x: eye.maxX - eye.width * 0.28, y: eye.minY - eye.height * 0.18),
+                 controlPoint2: NSPoint(x: eye.minX + eye.width * 0.28, y: eye.minY - eye.height * 0.18))
+    almond.close()
+    almond.lineWidth = s * 26 / 1024
+    almond.lineJoinStyle = .round
     color(0x3DDC84).setStroke()
-    tear.stroke()
+    almond.stroke()
+    let pupil = s * 22 / 1024
+    color(0x3DDC84).setFill()
+    NSBezierPath(ovalIn: NSRect(x: eye.midX - pupil, y: eye.midY - pupil, width: pupil * 2, height: pupil * 2)).fill()
 }
 
 for size in sizes {
