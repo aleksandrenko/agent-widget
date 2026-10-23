@@ -45,7 +45,7 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 ### Pin and the menu bar icon
 The pin in the header moves the panel above every window, including full-screen apps. Click it again to send the panel back to the desktop.
 
-The ✨ (or your brand mark) in the menu bar brings the panel back when windows cover it: click it and the panel jumps above everything until your next click elsewhere. Right-click it for **Pin above all windows**, **Refresh now**, **Move to this screen** (when the panel was left on a display that's gone) and **Quit**. Drag the panel from anywhere to move it, and drag its right edge to make it wider for long titles (up to twice the default width); it remembers both.
+The mini-panel icon in the menu bar brings the panel back when windows cover it: click it and the panel jumps above everything until your next click elsewhere. Right-click it for **Pin above all windows**, **Refresh now**, **Move to this screen** (when the panel was left on a display that's gone) and **Quit**. Drag the panel from anywhere to move it, and drag its right edge to make it wider for long titles (up to twice the default width); it remembers both.
 
 ---
 
