@@ -37,6 +37,7 @@ struct Snapshot: Decodable {
         var prs: Counts?
         var jira: JiraCounts?
         var e2e: E2E?
+        var prod: Prod?
         var ai: Usage?
     }
 
@@ -63,11 +64,27 @@ struct Snapshot: Decodable {
         var open: Int
         var week: Int
         var month: Int
+        /// The most recently updated open tickets, up to 15.
+        var openList: [Ticket]?
+
+        struct Ticket: Decodable {
+            var key: String
+            var title: String
+            var status: String
+        }
     }
 
     struct Counts: Decodable {
         var week: Int
         var month: Int
+        /// My open PRs.
+        var openList: [PR]?
+
+        struct PR: Decodable {
+            var repo: String
+            var number: Int
+            var title: String
+        }
     }
 
     struct E2E: Decodable {
@@ -78,6 +95,25 @@ struct Snapshot: Decodable {
         var running: Int
         var passed: Int?
         var recent: Int?
+    }
+
+    /// The configured repo's newest production release; `running` while the next one is going out.
+    struct Prod: Decodable {
+        var tag: String
+        var at: String
+        var url: String?
+        var running: Bool
+        /// Mine first, then the first others; `total` counts every PR in the release.
+        var prs: [PR]?
+        var total: Int?
+
+        struct PR: Decodable {
+            var number: Int
+            var title: String
+            var mine: Bool
+        }
+
+        var date: Date? { ISO8601DateFormatter().date(from: at) }
     }
 
     static var fileURL: URL {

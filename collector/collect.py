@@ -20,6 +20,7 @@ DEFAULTS = dict(
     brand=dict(accent='#3DDC84'),
     jira=dict(site='', projects=[], activeStatuses=['In Progress', 'In Review']),
     e2e=dict(repo='', workflow='', titlePrefix=''),
+    prod=dict(repo=''),
     prodComment='deployed to production',
 )
 
@@ -31,7 +32,7 @@ def load_config():
 
 CONFIG = load_config()
 JIRA = CONFIG['jira']['site'].rstrip('/')
-LANG_BG = os.environ.get('BIRDWATCHER_LANG', 'bg') == 'bg'  # set by the app from the menu
+LANG_BG = os.environ.get('THEWATCHER_LANG', 'bg') == 'bg'  # set by the app from the menu
 
 
 def tr(bg, en):
@@ -279,6 +280,34 @@ def e2e():
                 running=len(running), passed=sum(r['conclusion'] == 'success' for r in recent), recent=len(recent))
 
 
+def prod():
+    """When the configured repo last reached production, from its newest `prod-N` release. The deploy
+    cuts the `prod-N+1` tag before it applies and publishes the release once done, so a tag without its
+    release means one is going out now. None when no prod repo is configured."""
+    repo = CONFIG['prod']['repo']
+    if not repo:
+        return None
+    last = json.loads(sh(['gh', 'api', f'repos/{repo}/releases/latest']))
+    match = re.fullmatch(r'(\D*)(\d+)', last['tag_name'])
+    running = False
+    if match:
+        try:
+            sh(['gh', 'api', f'repos/{repo}/git/ref/tags/{match.group(1)}{int(match.group(2)) + 1}'])
+            running = True
+        except RuntimeError:  # 404: no newer tag yet
+            pass
+    # Release notes list one "- feat(x): KEY: Title (#123)" line per PR; mine first, then the first others.
+    listed = re.findall(r'^- (.+?) \(#(\d+)\)\s*$', last.get('body') or '', re.M)
+    since = (dt.datetime.fromisoformat(last['published_at'].replace('Z', '+00:00')) - dt.timedelta(days=30)).date()
+    mine = {int(n) for n in sh(['gh', 'api', '-X', 'GET', 'search/issues', '-f',
+                               f'q=repo:{repo} is:pr is:merged author:@me merged:>={since}', '-f', 'per_page=100',
+                               '-q', '.items[].number']).split()}
+    prs = [dict(number=int(n), title=clip(short_title(t)), mine=int(n) in mine) for t, n in listed]
+    shown = [p for p in prs if p['mine']] + [p for p in prs if not p['mine']][:12]
+    return dict(tag=last['tag_name'], at=last['published_at'], url=last['html_url'], running=running,
+                prs=shown, total=len(prs))
+
+
 def slack():
     """Unread DMs + mentions from the number on Slack's Dock icon ("•" alone means only channel unreads)."""
     out = subprocess.run(['lsappinfo', 'info', '-only', 'StatusLabel', 'Slack'], capture_output=True, text=True).stdout
@@ -335,7 +364,11 @@ def jira(extra_keys):
     # Done means Jira's Done category: a ticket on staging still counts as open.
     closed = lambda since: count(f'assignee = currentUser() AND statusCategory = Done AND statusCategoryChangedDate >= "{since}"')
     still_open = count('assignee = currentUser() AND statusCategory != Done')
-    return issues, dict(open=still_open, week=closed(week), month=closed(month))
+    mine = get('/rest/api/3/search/jql?' + urllib.parse.urlencode(dict(
+        jql='assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC', fields='summary,status', maxResults=15)))
+    open_list = [dict(key=i['key'], title=clip(i['fields']['summary'], 60), status=i['fields']['status']['name'])
+                 for i in mine.get('issues', [])]
+    return issues, dict(open=still_open, week=closed(week), month=closed(month), openList=open_list)
 
 
 def jira_state(status):
@@ -351,6 +384,11 @@ def jira_state(status):
     if 'progress' in s:
         return 'progress'
     return 'todo'
+
+
+def clip(text, size=70):
+    """One tooltip line: long titles end in an ellipsis."""
+    return text if len(text) <= size else text[:size - 1].rstrip() + '…'
 
 
 def short_title(pr_title):
@@ -445,12 +483,16 @@ def main(local=False):
             errors[name] = str(e).strip()[-200:] or type(e).__name__
             return fallback
 
-    with cf.ThreadPoolExecutor(4) as pool:
-        fs, fp, fc, fe = pool.submit(sessions), pool.submit(prs), pool.submit(pr_counts), pool.submit(e2e)
+    with cf.ThreadPoolExecutor(5) as pool:
+        fs, fp, fc, fe, fd = pool.submit(sessions), pool.submit(prs), pool.submit(pr_counts), pool.submit(e2e), pool.submit(prod)
         sess = fs.result()
         pulls = safe('github', fp, [])
         counts = safe('prCounts', fc, None)
+        if counts is not None:  # the open ones are already in pulls, for the task rows
+            counts['openList'] = [dict(repo=p['repo'], number=p['number'], title=clip(short_title(p['title'])))
+                                  for p in pulls if p['merged'] is None]
         e2e_state = safe('e2e', fe, None)
+        prod_state = safe('prod', fd, None)
     keys = {k for x in sess + pulls for k in x['keys']}
     try:
         issues, closed = jira(keys)
@@ -461,7 +503,7 @@ def main(local=False):
         unread = slack()
     except Exception as e:
         unread, errors['slack'] = [], str(e)[-200:]
-    stats = dict(prs=counts, jira=closed, e2e=e2e_state, ai=usage())
+    stats = dict(prs=counts, jira=closed, e2e=e2e_state, prod=prod_state, ai=usage())
     json.dump(dict(at=NOW, pulls=pulls, issues=issues, slack=unread, stats=stats, errors=errors), open(REMOTE_CACHE, 'w'))
     write(dict(generatedAt=NOW, brand=CONFIG['brand'], tasks=build(sess, pulls, issues, 'jira' in errors), slack=unread,
                stats=stats, errors=errors))

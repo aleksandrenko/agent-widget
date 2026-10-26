@@ -58,7 +58,7 @@ final class Setup: ObservableObject {
             let (data, _) = try await URLSession.shared.data(from: url)
             guard let preset = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let config = preset["config"] as? [String: Any] else {
-                message = L("Линкът не води до настройки за BirdWatcher.", "The link isn't a BirdWatcher setup file.")
+                message = L("Линкът не води до настройки за TheWatcher.", "The link isn't a TheWatcher setup file.")
                 return
             }
             try FileManager.default.createDirectory(at: Self.dataDir, withIntermediateDirectories: true)
@@ -98,10 +98,10 @@ final class Setup: ObservableObject {
     /// What to paste into Claude so a scheduled task keeps the Claude limit bar filled.
     var claudePrompt: String {
         """
-        Create a scheduled task with taskId "birdwatcher-usage", title "BirdWatcher: Claude limit", running every 15 minutes \
+        Create a scheduled task with taskId "birdwatcher-usage", title "TheWatcher: Claude limit", running every 15 minutes \
         on weekdays from 9:00 to 18:59 (cron "*/15 9-18 * * 1-5"), notifications off, with this prompt:
 
-        You keep one small file up to date for the BirdWatcher desktop panel. Do only this, quietly, and finish fast:
+        You keep one small file up to date for the TheWatcher desktop panel. Do only this, quietly, and finish fast:
         1. Load the tool `mcp__ccd_session_mgmt__get_usage` with ToolSearch (query "select:mcp__ccd_session_mgmt__get_usage") \
         and call it with no arguments.
         2. From its `plan.windows`, take the window labelled "5-hour limit" and the one labelled "Weekly · all models".
@@ -140,7 +140,7 @@ struct SetupView: View {
                 HStack(spacing: 12) {
                     Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 48, height: 48)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(L("Настройка на BirdWatcher", "Set up BirdWatcher")).font(.title2.weight(.semibold))
+                        Text(L("Настройка на TheWatcher", "Set up TheWatcher")).font(.title2.weight(.semibold))
                         Text(L("Няколко стъпки и панелът ти е на десктопа.", "A few steps and the panel is on your desktop."))
                             .foregroundStyle(.secondary)
                     }

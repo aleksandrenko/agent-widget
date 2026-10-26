@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Snapshot.load().map(show)
         addStatusItem()
+        NSApp.mainMenu = Self.editMenu()
         if setup.needed {
             addDesktopIcon()
             showSetup()
@@ -103,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         if urls.contains(where: { $0.host == "refresh" }) { collect() }
+        if urls.contains(where: { $0.host == "setup" }) { showSetup() }
         if urls.contains(where: { $0.host == "snapshot" }) {
             let dir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".agent-widget")
             snapshot(to: dir.appendingPathComponent("panel.png"))
@@ -136,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        item.button?.toolTip = "BirdWatcher"
+        item.button?.toolTip = "TheWatcher"
         statusItem = item
         snapshotWatch = store.$snapshot.sink { [weak self] _ in
             DispatchQueue.main.async { self?.updateBlink() }
@@ -189,7 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "BirdWatcher"
+        image.accessibilityDescription = "TheWatcher"
         return image
     }
 
@@ -260,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(language)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: L("Настройка…", "Setup…"), action: #selector(showSetup), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: L("За BirdWatcher", "About BirdWatcher"), action: #selector(about), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L("За TheWatcher", "About TheWatcher"), action: #selector(about), keyEquivalent: ""))
         for item in menu.items where item.action != nil { item.target = self }
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)  // opens the menu under the icon
@@ -282,6 +284,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lines.append(L("Следва: \(next.title) в \(next.start.formatted(date: .omitted, time: .shortened))", "Next: \(next.title) at \(next.start.formatted(date: .omitted, time: .shortened))"))
         }
         if let e2e = snapshot.stats.e2e { lines.append(e2e.running > 0 ? L("e2e: върви", "e2e: running") : e2e.ok ? L("e2e: зелено", "e2e: green") : L("e2e: червено", "e2e: red")) }
+        if let prod = snapshot.stats.prod, let date = prod.date {
+            lines.append(prod.running ? L("prod: качва се", "prod: deploying") : "prod: \(Footer.age(Date().timeIntervalSince(date)))")
+        }
         return lines
     }
 
@@ -318,9 +323,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// First launch: a link to the app on the Desktop, as the installer used to make.
     private func addDesktopIcon() {
-        let link = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/BirdWatcher")
+        let link = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/TheWatcher")
         guard (try? link.checkResourceIsReachable()) != true else { return }
         try? FileManager.default.createSymbolicLink(at: link, withDestinationURL: Bundle.main.bundleURL)
+    }
+
+    /// Never shown (the app has no menu bar), but Cmd+X/C/V/A/Z in text fields go through it:
+    /// without it the setup window's token field can't be pasted into.
+    private static func editMenu() -> NSMenu {
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let item = NSMenuItem()
+        item.submenu = edit
+        let main = NSMenu()
+        main.addItem(NSMenuItem())  // the app menu slot
+        main.addItem(item)
+        return main
     }
 
     /// The setup window: on first launch, and from the menu.
@@ -328,7 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if setupWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 640), styleMask: [.titled, .closable],
                                   backing: .buffered, defer: false)
-            window.title = "BirdWatcher"
+            window.title = "TheWatcher"
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: SetupView(setup: setup, meetings: meetings) { [weak self] in
                 self?.setupWindow?.close()
@@ -361,7 +384,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         credits.append(NSAttributedString(string: "\n\n" + link, attributes: [
             .font: NSFont.systemFont(ofSize: 11), .link: URL(string: "https://" + link)!]))
         NSApp.activate()
-        NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "BirdWatcher", .credits: credits])
+        NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "TheWatcher", .credits: credits])
     }
 
     /// Switches the panel and menus now; the collector's own texts follow on its next run.
@@ -393,17 +416,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func collect(local: Bool = false) {
         guard !collecting else { return }
         collecting = true
+        if !local { store.refreshing = true }
         let home = NSHomeDirectory()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: Setup.python)
         process.arguments = [Self.collector] + (local ? ["--local"] : [])
         process.environment = ["HOME": home, "USER": NSUserName(), "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
-                               "BIRDWATCHER_LANG": Lang.current.rawValue]
+                               "THEWATCHER_LANG": Lang.current.rawValue]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle(forWritingAtPath: "\(home)/.agent-widget/collect.log") ?? FileHandle.nullDevice
         process.terminationHandler = { [weak self] _ in
             Task { @MainActor in
                 self?.collecting = false
+                self?.store.refreshing = false
                 if let snapshot = Snapshot.load() { self?.show(snapshot) }
             }
         }
@@ -411,6 +436,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try process.run()
         } catch {
             collecting = false
+            store.refreshing = false
         }
     }
 }
@@ -435,7 +461,7 @@ enum Demo {
 /// every app window, on all Spaces. Its height follows the panel content, growing downwards.
 final class DesktopPanel: NSPanel {
     init(content: NSView) {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 360, height: 200),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: Store.minWidth, height: 200),
                    styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear

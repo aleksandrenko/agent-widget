@@ -19,5 +19,8 @@
     "workflow": "e2e.yml",
     "titlePrefix": ""
   },
+  "prod": {
+    "repo": "your-org/your-repo"
+  },
   "prodComment": "deployed to production"
 }

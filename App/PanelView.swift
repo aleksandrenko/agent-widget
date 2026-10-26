@@ -6,15 +6,19 @@ final class Store: ObservableObject {
     static let pinnedKey = "pinnedAboveWindows"
 
     @Published var snapshot: Snapshot?
+    /// A full collect (GitHub, Jira, Slack) is running: the header's refresh icon turns.
+    @Published var refreshing = false
     /// Pinned: the panel floats above every window. Unpinned: it sits on the desktop, under them.
     @Published var pinned = !Demo.isOn && UserDefaults.standard.bool(forKey: pinnedKey) {
         didSet { UserDefaults.standard.set(pinned, forKey: Self.pinnedKey) }
     }
     /// Dragged on the panel's right edge, so longer titles fit.
-    @Published var width = Demo.isOn ? 360 : CGFloat(max(360, UserDefaults.standard.object(forKey: widthKey) as? Double ?? 360)) {
+    @Published var width = Demo.isOn ? minWidth : max(minWidth, CGFloat(UserDefaults.standard.object(forKey: widthKey) as? Double ?? 0)) {
         didSet { UserDefaults.standard.set(Double(width), forKey: Self.widthKey) }
     }
     static let widthKey = "panelWidth"
+    /// Narrowest the panel goes: the footer still fits on one line with its roomy gaps.
+    static let minWidth: CGFloat = 400
     /// The UI language, picked in the menu bar menu; changing it redraws the panel.
     @Published var language = Lang.current {
         didSet { UserDefaults.standard.set(language.rawValue, forKey: Lang.key) }
@@ -95,8 +99,8 @@ struct PanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Header(brand: store.snapshot?.brand, pinned: $store.pinned, close: { store.hidden = true },
-                   refresh: refresh)
+            Header(brand: store.snapshot?.brand, pinned: $store.pinned, refreshing: store.refreshing,
+                   close: { store.hidden = true }, refresh: refresh)
             if let snapshot = store.snapshot {
                 VStack(spacing: 0) {
                     ForEach(Array(snapshot.tasks.enumerated()), id: \.element.id) { index, task in
@@ -158,16 +162,18 @@ struct PanelView: View {
 struct Header: View {
     var brand: Snapshot.Brand?
     @Binding var pinned: Bool
+    var refreshing = false
     var close: () -> Void
     var refresh: () -> Void
     @State private var pinHovered = false
     @State private var closeHovered = false
+    @State private var headerHovered = false
 
     var body: some View {
         // One 22 pt row, everything centred on it. The P lines up with the status squares below
         // and the pin with the GitHub icons.
         HStack(spacing: 0) {
-          // Everything but the pin and ✕: click to collect fresh data now.
+          // Everything but the pin and ✕: double-click to collect fresh data now.
           HStack(spacing: 0) {
             Group {
                 if let mark = Self.mark {
@@ -178,18 +184,30 @@ struct Header: View {
             }
             .frame(width: 11, height: 15)
             .foregroundStyle(Palette.accent)
-            Text("BirdWatcher")
+            Text("TheWatcher")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
                 .padding(.leading, 7)
+            // Barely there: a spinning arc while it refreshes, still on hover as the double-click hint.
+            TimelineView(.animation(paused: !refreshing)) { context in
+                Circle()
+                    .trim(from: 0, to: 0.75)
+                    .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                    .frame(width: 9, height: 9)
+                    .rotationEffect(.degrees(refreshing ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360 : 0))
+            }
+            .frame(width: 9, height: 9)
+            .opacity(refreshing || headerHovered ? 1 : 0)
+            .padding(.leading, 5)
             Spacer(minLength: 8)
             (Text(Image(systemName: "person.fill")).font(.system(size: 10)).baselineOffset(1.5) + Text(" " + (Demo.isOn ? "Jamie Rivera" : NSFullUserName())).font(.system(size: 12)))
                 .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
           }
           .contentShape(Rectangle())
-          .hoverTip(L("Клик → обнови данните сега", "Click → refresh now"), L("сесии, PR-и, Slack и срещи", "sessions, PRs, Slack and meetings"))
-          .onTapGesture {
+          .hoverTip(L("Двоен клик → обнови данните сега", "Double-click → refresh now"), L("сесии, PR-и, Slack и срещи", "sessions, PRs, Slack and meetings"))
+          .onHover { headerHovered = $0 }
+          .onTapGesture(count: 2) {
               refresh()
               Tooltip.shared.show(title: L("Обновявам…", "Refreshing…"))
               DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { Tooltip.shared.hide() }
@@ -275,7 +293,7 @@ struct EdgeGlow: View {
 
 /// The panel's right edge: drag it to make the panel wider or narrower.
 struct ResizeEdge: View {
-    static let range: ClosedRange<CGFloat> = 360...720
+    static let range: ClosedRange<CGFloat> = Store.minWidth...720
     @Binding var width: CGFloat
     @State private var start: CGFloat?
 
@@ -338,6 +356,13 @@ struct WeekLine: View {
             ZStack(alignment: .leading) {
                 Palette.track
                 GeometryReader { geo in Palette.accent.frame(width: geo.size.width * week.fraction) }
+                // Faint dark ticks between the five days, to see how far today's slice has got.
+                GeometryReader { geo in
+                    ForEach(1..<5) { day in
+                        Rectangle().fill(.black.opacity(0.5)).frame(width: 2)
+                            .offset(x: geo.size.width * Double(day) / 5 - 1)
+                    }
+                }
             }
             .frame(height: 2)
             .frame(height: 8, alignment: .bottom)
@@ -628,26 +653,37 @@ struct Footer: View {
     @ObservedObject var meetings: Meetings
     var open: (String) -> Void
     @State private var e2eHovered = false
+    @State private var prodHovered = false
     @State private var calendarHovered = false
     static let calendarWeb = "https://calendar.google.com/calendar/r/day"
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
           VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                if stats.e2e != nil || errors["e2e"] != nil { e2e }
-                counter(icon: "arrow.triangle.pull", counts: stats.prs, title: L("Твоите PR-и", "Your PRs"), error: errors["prCounts"])
-                if stats.jira != nil { jiraCounter }  // appears once Jira answers (needs the API token)
-                Spacer(minLength: 0)
-                HStack(spacing: 6) {  // the limit bar sits close to the calendar
-                    if let ai = stats.ai { UsagePill(usage: ai) }
-                    calendar(context.date)
-                }
+            // Roomy gaps when the panel is wide enough, the old tighter ones when it isn't.
+            ViewThatFits(in: .horizontal) {
+                row(context.date, spacing: 21)
+                row(context.date, spacing: 14)
             }
             .font(.system(size: 11))
             .foregroundStyle(.white.opacity(0.85))
+            .lineLimit(1)
             .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 6))
           }
+        }
+    }
+
+    private func row(_ now: Date, spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
+            if stats.e2e != nil || errors["e2e"] != nil { e2e }
+            if stats.prod != nil || errors["prod"] != nil { prod(now) }
+            counter(icon: "arrow.triangle.pull", counts: stats.prs, title: L("Твоите PR-и", "Your PRs"), error: errors["prCounts"])
+            jiraCounter  // "–" until Jira answers (needs the API token); hover says why
+            Spacer(minLength: 0)
+            HStack(spacing: 6) {  // the limit bar sits close to the calendar
+                if let ai = stats.ai { UsagePill(usage: ai) }
+                calendar(now)
+            }
         }
     }
 
@@ -688,6 +724,72 @@ struct Footer: View {
         return lines.joined(separator: "\n")
     }
 
+    /// Browser icon + "2ч": how long ago the last release reached production, with the e2e clock while one goes out.
+    private func prod(_ now: Date) -> some View {
+        let state = stats.prod
+        let date = state?.date
+        return HStack(spacing: 4) {
+            Image(systemName: "safari")
+            if let date { Text(Self.age(now.timeIntervalSince(date))) }
+            if state?.running == true {
+                TimelineView(.animation) { context in
+                    Image(systemName: "clock")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Palette.hex(0x60A5FA))
+                        .opacity(0.6 + 0.4 * cos(context.date.timeIntervalSinceReferenceDate * .pi / 0.6))
+                }
+            }
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Color.white.opacity(prodHovered ? 0.08 : 0), in: Capsule())
+        .padding(.horizontal, -5)
+        .onHover { prodHovered = $0 }
+        .hoverTip(prodTitle(now), prodDetail)
+        .onTapGesture { state?.url.map(open) }
+    }
+
+    private func prodTitle(_ now: Date) -> String {
+        guard let state = stats.prod, let date = state.date else { return L("prod: няма данни", "prod: no data") }
+        if state.running { return L("Нова версия се качва на прод", "A new version is going to prod") }
+        let age = Self.age(now.timeIntervalSince(date))
+        return L("На прод от \(age) · \(state.tag)", "On prod for \(age) · \(state.tag)")
+    }
+
+    private var prodDetail: String? {
+        guard let state = stats.prod, let date = state.date else { return errors["prod"] }
+        var lines = [L("последен деплой: \(state.tag), \(date.formatted(date: .abbreviated, time: .shortened))",
+                       "last deploy: \(state.tag), \(date.formatted(date: .abbreviated, time: .shortened))")]
+        let prs = state.prs ?? []
+        let mine = prs.filter(\.mine), others = prs.filter { !$0.mine }
+        if !mine.isEmpty {
+            lines.append(L("\nТвоите (\(mine.count)):", "\nYours (\(mine.count)):"))
+            lines += mine.map { "● \($0.title) #\($0.number)" }
+        }
+        if let total = state.total, total > mine.count {
+            lines.append(mine.isEmpty ? L("\n\(total) PR-а:", "\n\(total) PRs:") : L("\nДруги (\(total - mine.count)):", "\nOthers (\(total - mine.count)):"))
+            lines += others.map { "• \($0.title)" }
+            if total - mine.count > others.count { lines.append(L("+\(total - mine.count - others.count) още", "+\(total - mine.count - others.count) more")) }
+        }
+        lines.append(L("\nклик → release notes", "\nclick → release notes"))
+        return lines.joined(separator: "\n")
+    }
+
+    /// Hover lines for a list: the first 15, then "+N още" for the rest of `total`.
+    static func list(_ lines: [String], total: Int) -> [String] {
+        if lines.isEmpty && total == 0 { return [L("няма", "none")] }
+        let shown = Array(lines.prefix(15))
+        return total > shown.count ? shown + [L("+\(total - shown.count) още", "+\(total - shown.count) more")] : shown
+    }
+
+    /// 25 мин, 3ч, 2д.
+    static func age(_ seconds: TimeInterval) -> String {
+        let minutes = max(0, Int(seconds / 60))
+        if minutes < 60 { return L("\(minutes) мин", "\(minutes)m") }
+        if minutes < 48 * 60 { return L("\(minutes / 60)ч", "\(minutes / 60)h") }
+        return L("\(minutes / 1440)д", "\(minutes / 1440)d")
+    }
+
     /// Open / Done this month, like the PR counter.
     private var jiraCounter: some View {
         HStack(spacing: 4) {
@@ -699,7 +801,13 @@ struct Footer: View {
             }
         }
         .hoverTip(L("Твоите Jira тикети", "Your Jira tickets"),
-                  stats.jira.map { L("\($0.open) отворени · \($0.month) Done този месец", "\($0.open) open · \($0.month) done this month") } ?? errors["jira"])
+                  stats.jira.map { jira in
+                      ([L("\(jira.open) отворени · \(jira.month) Done този месец", "\(jira.open) open · \(jira.month) done this month"), ""]
+                       + Self.list((jira.openList ?? []).map { "• \($0.key) \($0.title) · \($0.status)" }, total: jira.open))
+                          .joined(separator: "\n")
+                  }
+                      ?? [errors["jira"], L("клик → въведи имейл и токен", "click → enter your email and token")].compactMap { $0 }.joined(separator: "\n"))
+        .onTapGesture { if stats.jira == nil { open("agentwidget://setup") } }
     }
 
     private func counter(icon: String, counts: Snapshot.Counts?, title: String, error: String?) -> some View {
@@ -711,8 +819,20 @@ struct Footer: View {
                 Text("–")
             }
         }
-        .hoverTip(title, counts.map { L("\($0.week) тази седмица · \($0.month) този месец", "\($0.week) this week · \($0.month) this month") } ?? error)
+        .hoverTip(title, counts.map { counts in
+            let open = counts.openList ?? []
+            return ([L("\(counts.week) тази седмица · \(counts.month) този месец", "\(counts.week) this week · \(counts.month) this month"),
+                     L("\nОтворени (\(open.count)):", "\nOpen (\(open.count)):")]
+                    + Self.list(open.map { "• \($0.title) · \($0.repo) #\($0.number)" }, total: open.count)
+                    + [L("\nклик → твоите PR-и в GitHub", "\nclick → your PRs on GitHub")])
+                .joined(separator: "\n")
+        } ?? error)
+        .contentShape(Rectangle())
+        .onTapGesture { open(Self.myPRs) }
     }
+
+    /// GitHub's list of my open PRs across every repo.
+    static let myPRs = "https://github.com/pulls?q=is%3Apr+is%3Aopen+author%3A%40me+archived%3Afalse"
 
     /// Today's meeting count; turns into an orange "3 · 4 мин" pill before a meeting and a red one during it.
     private func calendar(_ now: Date) -> some View {

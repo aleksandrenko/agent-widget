@@ -1,5 +1,5 @@
 // Draws the app icon: a dark glass tile with the panel's corner glow and minimal green binoculars
-// (BirdWatcher). Writes App/AppIcon.icns.
+// (TheWatcher). Writes App/AppIcon.icns.
 //
 //     swift tools/icon.swift
 import AppKit

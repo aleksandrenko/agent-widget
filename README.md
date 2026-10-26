@@ -1,11 +1,11 @@
-# BirdWatcher
+# TheWatcher
 
 **Everything your AI agents and your tickets are doing, on one glass panel on your Mac desktop.**
 
-BirdWatcher sits on your wallpaper (or, pinned, above every window) and answers one question at a glance: *what needs me right now?* It joins your Claude Code sessions, your pull requests, your Jira tickets, your Slack, your e2e runs and your calendar into one short list, one row per task.
+TheWatcher sits on your wallpaper (or, pinned, above every window) and answers one question at a glance: *what needs me right now?* It joins your Claude Code sessions, your pull requests, your Jira tickets, your Slack, your e2e runs and your calendar into one short list, one row per task.
 
 <p align="center">
-  <img src="docs/screenshots/default.png" width="420" alt="BirdWatcher on the desktop: six tasks, two Slack messages, the footer and a meeting in 4 minutes">
+  <img src="docs/screenshots/default.png" width="420" alt="TheWatcher on the desktop: six tasks, two Slack messages, the footer and a meeting in 4 minutes">
 </p>
 
 | In a meeting | A quiet afternoon |
@@ -37,6 +37,7 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 
 ### Footer
 - **`e2e`**: green or red by the last run of the e2e workflow you configure (for example the full suite every release build goes through), with a blinking clock while one is running. Hover it for how many of the last 10 passed; click it to open the run.
+- **Browser icon + `2h`**: how long ago the last release of the repo you configure (`prod.repo`, for example the portal) reached production, from its newest `prod-N` release; the same blinking clock while the next one is going out. Hover it for the release and its first changes; click it to open the release notes.
 - **PRs**: PRs you opened this week / this month.
 - **Tickets**: your open Jira tickets / tickets done this month. Appears once Jira answers (run `setup-jira-token.sh`).
 - **Claude limit**: how much of your Claude 5-hour session limit is used, a small bar that fills up green → orange → red; hover for the %. Filled by a Claude scheduled task (`birdwatcher-usage`, every 15 min on weekdays), because only a Claude session can read the plan limits.
@@ -44,9 +45,9 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 - **Week bar**: the panel's bottom edge fills in your accent colour from Monday 09:00 to Friday 18:00. Hover it for the day and the week's progress.
 
 ### Pin and the menu bar icon
-The pin in the header moves the panel above every window, including full-screen apps. Click it again to send the panel back to the desktop.
+Double-click the header to refresh everything now; a faint spinner next to the name turns while it does (and shows, still, while you hover the header). The pin in the header moves the panel above every window, including full-screen apps. Click it again to send the panel back to the desktop.
 
-The ✕ in the header hides the panel; while it's hidden nothing updates, and it refreshes the moment you open it again. The binoculars in the menu bar show its state, clear lenses while the panel is open and covered while it is hidden; they blink while someone wants you (an agent waiting for your answer, or unread Slack). Click them for a menu with **Open / Hide panel**, a short summary (tasks, who's waiting for you, Slack, the next meeting, e2e), **Pin above all windows**, **Language** (Български / English) and **About**. To quit, use Activity Monitor or `pkill BirdWatcher`; open it again from Spotlight, Apps or the Desktop icon.
+The ✕ in the header hides the panel; while it's hidden nothing updates, and it refreshes the moment you open it again. The binoculars in the menu bar show its state, clear lenses while the panel is open and covered while it is hidden; they blink while someone wants you (an agent waiting for your answer, or unread Slack). Click them for a menu with **Open / Hide panel**, a short summary (tasks, who's waiting for you, Slack, the next meeting, e2e), **Pin above all windows**, **Language** (Български / English) and **About**. To quit, use Activity Monitor or `pkill TheWatcher`; open it again from Spotlight, Apps or the Desktop icon.
 
 ---
 
@@ -77,8 +78,8 @@ Pin it. It floats above your editor; unpin it when you want your screen back.
 
 ## Install
 
-1. Download **[BirdWatcher.dmg](https://github.com/aleksandrenko/agent-widget/releases/latest/download/BirdWatcher.dmg)**, open it and drag BirdWatcher into Applications.
-2. Open BirdWatcher. The first time, macOS says it can't check the app (it isn't notarized): open *System Settings → Privacy & Security*, scroll down and click **Open Anyway**.
+1. Download **[TheWatcher.dmg](https://github.com/aleksandrenko/agent-widget/releases/latest/download/TheWatcher.dmg)**, open it and drag TheWatcher into Applications.
+2. Open TheWatcher. The first time, macOS says it can't check the app (it isn't notarized): open *System Settings → Privacy & Security*, scroll down and click **Open Anyway**.
 3. The setup window walks you through the rest: Python and the GitHub CLI if they're missing, your team's settings link, and the optional Jira token, calendar and Claude limit.
 
 Requirements: macOS 15 or later, a GitHub account with the `gh` CLI (setup offers to install and sign in).
@@ -87,7 +88,7 @@ Requirements: macOS 15 or later, a GitHub account with the `gh` CLI (setup offer
 ```bash
 git clone git@github.com:aleksandrenko/agent-widget.git ~/agent-widget
 ~/agent-widget/build.sh            # build for this Mac, install to /Applications, start
-~/agent-widget/build.sh --release  # universal dist/BirdWatcher.dmg
+~/agent-widget/build.sh --release  # universal dist/TheWatcher.dmg
 ```
 Needs the Xcode Command Line Tools (`xcode-select --install`); no Xcode project or licence.
 
@@ -116,7 +117,7 @@ Leave a section empty and that part of the panel stays empty (no Jira icons, no 
 
 ```
 ┌─────────────────────────────┐  every 60 s   ┌──────────────────────────────┐
-│  BirdWatcher.app (SwiftUI)  │ ────────────▶ │ collector/collect.py         │
+│  TheWatcher.app (SwiftUI)  │ ────────────▶ │ collector/collect.py         │
 │  · glass panel on desktop   │               │  · Claude session files      │
 │  · calendar via EventKit    │ ◀──────────── │  · gh: PRs, reviews, CI, e2e │
 │  · hover tooltips, clicks   │ tasks.json    │  · Jira REST (keychain token)│
@@ -141,7 +142,7 @@ open -g "agentwidget://refresh"                 # collect now
 open -g "agentwidget://snapshot"                # write the live panel to ~/.agent-widget/panel.png
 ```
 
-**Demo mode**: `/Applications/BirdWatcher.app/Contents/MacOS/BirdWatcher --demo docs/demo/default` shows sample data and touches nothing else: no collector, no login item, no saved position. Add `--snapshot out.png` to write a picture of the panel and quit. The README screenshots are made this way, so they never show real work.
+**Demo mode**: `/Applications/TheWatcher.app/Contents/MacOS/TheWatcher --demo docs/demo/default` shows sample data and touches nothing else: no collector, no login item, no saved position. Add `--snapshot out.png` to write a picture of the panel and quit. The README screenshots are made this way, so they never show real work.
 
 ### Layout
 ```
@@ -161,7 +162,7 @@ setup-jira-token.sh  Jira token to the keychain
 |---|---|
 | No panel after `build.sh` | It may be on another display. Run `defaults delete com.nikolay.agentwidget panelTopLeft`, then `./build.sh`. |
 | Jira icons grey, ticket count `–` | Set `jira.site` in `config.json`, then run `./setup-jira-token.sh` (the token may have expired). |
-| Calendar shows `–` | Calendar access was denied: *System Settings → Privacy & Security → Calendars → BirdWatcher*. |
+| Calendar shows `–` | Calendar access was denied: *System Settings → Privacy & Security → Calendars → TheWatcher*. |
 | Calendar shows `0` | Add your work Google account in *Internet Accounts*. |
 | Nothing updates | Check `~/.agent-widget/collect.log`, or run `python3 collector/collect.py` by hand. |
 | A session sits under the wrong task | The Jira key comes from the session title, folder, branch, or the keys you typed in it. Mention the right key once in the session. |
