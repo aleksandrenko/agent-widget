@@ -93,7 +93,7 @@ git clone git@github.com:aleksandrenko/agent-widget.git ~/agent-widget
 Needs the Xcode Command Line Tools (`xcode-select --install`); no Xcode project or licence.
 
 ### Configuration
-Everything specific to your company lives outside the repo, in `~/.agent-widget/`:
+Everything specific to your company lives outside the app, in `~/.agent-widget/` (Payhawk's is in [`teams/payhawk/`](teams/payhawk/)):
 
 | File | What |
 |---|---|

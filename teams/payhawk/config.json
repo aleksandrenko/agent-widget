@@ -1,0 +1,31 @@
+{
+  "team": "Payhawk",
+  "brand": {
+    "accent": "#3DDC84"
+  },
+  "jira": {
+    "site": "https://payhawk.atlassian.net",
+    "projects": [
+      "FT",
+      "CT",
+      "ER",
+      "CDE",
+      "SUP",
+      "DS",
+      "INF"
+    ],
+    "activeStatuses": [
+      "In Progress",
+      "In Review"
+    ]
+  },
+  "e2e": {
+    "repo": "payhawk/solution",
+    "workflow": 317564165,
+    "titlePrefix": "e2eGate:all:"
+  },
+  "prodComment": "deployed to production",
+  "prod": {
+    "repo": "payhawk/portal"
+  }
+}
