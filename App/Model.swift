@@ -18,6 +18,27 @@ func L(_ bg: String, _ en: String) -> String {
     Lang.current == .bg ? bg : en
 }
 
+/// The parts of the panel you turn on and off in the menu bar menu → Modules. To add one: a case here with
+/// its name, a `store.isOn(.x)` check where the panel draws it, and the same name in the collector's `OFF`
+/// check if it fetches something.
+enum Module: String, CaseIterable {
+    case e2e, portal, mobile, prs, jira, limit, calendar, slack
+    static let offKey = "modulesOff"
+
+    var name: String {
+        switch self {
+        case .e2e: L("Статус на e2e тестовете", "e2e tests status")
+        case .portal: L("Последен release на портала", "Portal last release")
+        case .mobile: L("Последен release на мобилното", "Mobile last release")
+        case .prs: L("Моите PR-и в GitHub", "My GitHub PRs")
+        case .jira: L("Моите Jira тикети за месеца", "My monthly Jira tickets")
+        case .limit: L("Текущ лимит на Claude", "Claude current limits")
+        case .calendar: L("Срещите ми в календара", "My calendar meetings")
+        case .slack: L("Известия за Slack съобщения", "Slack message alerts")
+        }
+    }
+}
+
 /// Mirrors ~/.agent-widget/tasks.json written by collector/collect.py.
 struct Snapshot: Decodable {
     var generatedAt: Double

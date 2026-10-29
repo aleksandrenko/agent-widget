@@ -19,6 +19,32 @@ final class Store: ObservableObject {
     static let widthKey = "panelWidth"
     /// Narrowest the panel goes: the footer still fits on one line with its roomy gaps.
     static let minWidth: CGFloat = 400
+    /// Dragged on the panel's bottom edge: the items scroll between the header and the footer.
+    /// nil (double-click the bottom edge) fits the panel to its content.
+    @Published var height: CGFloat? = Demo.isOn ? nil : (UserDefaults.standard.object(forKey: heightKey) as? Double).map { CGFloat($0) } {
+        didSet { height.map { UserDefaults.standard.set(Double($0), forKey: Self.heightKey) } ?? UserDefaults.standard.removeObject(forKey: Self.heightKey) }
+    }
+    static let heightKey = "panelHeight"
+    static let minHeight: CGFloat = 160
+    /// Tallest the panel goes: from its top down to the bottom of the screen it is on (it grows downwards).
+    var maxHeight: CGFloat {
+        guard let window, let screen = (window.screen ?? NSScreen.main)?.visibleFrame else { return 2000 }
+        return max(Self.minHeight, window.frame.maxY - screen.minY - 8)
+    }
+    /// The panel's height as laid out, where a drag on the bottom edge starts from.
+    var laidOutHeight: CGFloat = 0
+    /// The panel's window: resizing from the left or top edge moves it.
+    weak var window: NSWindow?
+    /// The modules turned off in the menu bar menu → Modules.
+    @Published var modulesOff = Set((UserDefaults.standard.stringArray(forKey: Module.offKey) ?? []).compactMap(Module.init(rawValue:))) {
+        didSet { UserDefaults.standard.set(modulesOff.map(\.rawValue).sorted(), forKey: Module.offKey) }
+    }
+
+    func isOn(_ module: Module) -> Bool { !modulesOff.contains(module) }
+    /// The look, picked in the menu bar menu → Themes; changing it redraws the panel.
+    @Published var theme = Theme.current.id {
+        didSet { UserDefaults.standard.set(theme, forKey: Theme.key) }
+    }
     /// The UI language, picked in the menu bar menu; changing it redraws the panel.
     @Published var language = Lang.current {
         didSet { UserDefaults.standard.set(language.rawValue, forKey: Lang.key) }
@@ -32,13 +58,56 @@ final class Store: ObservableObject {
 
 // MARK: - Palette
 
+/// A look for the panel, picked in the menu bar menu → Themes. To add one: a value here, listed in `all`.
+struct Theme {
+    var id: String
+    var name: String
+    /// The accent: header mark, pinned pin, week bar, tour outline. A team's brand.accent in config.json wins.
+    var accent: UInt32
+    /// Dark glass with light text, or light glass with dark text.
+    var dark: Bool
+    /// The tint of the outer glass and of the task layer on it, and how much of each covers what's behind.
+    var tint: UInt32
+    var tasksTint: UInt32
+    var opacity: (outer: Double, tasks: Double) = (0.8, 0.9)
+    /// The still glow from the top-left corner.
+    var glow: [(color: UInt32, opacity: Double, center: UnitPoint, radius: CGFloat)] = []
+
+    static let payhawkGlow: [(color: UInt32, opacity: Double, center: UnitPoint, radius: CGFloat)] = [
+        (0x3B82F6, 0.75, .topLeading, 0.65),
+        (0x8B5CF6, 0.55, UnitPoint(x: 0.55, y: 0.12), 0.5),
+        (0x14B8A6, 0.50, UnitPoint(x: 0.12, y: 0.72), 0.5),
+        (0x22C55E, 0.35, UnitPoint(x: 0.4, y: 0.55), 0.38),
+    ]
+    static let payhawkDarkGreen = Theme(id: "payhawk-dark-green", name: "Payhawk Dark Green", accent: 0x3DDC84, dark: true,
+                                        tint: 0x080D1A, tasksTint: 0x080D1A, glow: payhawkGlow)
+    /// The same panel in daylight: light glass and dark text, the same glow, softer.
+    static let payhawkDay = Theme(id: "payhawk-day", name: "Payhawk Day", accent: 0x3DDC84, dark: false,
+                                  tint: 0xEDF1F8, tasksTint: 0xFFFFFF, glow: payhawkGlow.map { ($0.color, $0.opacity * 0.45, $0.center, $0.radius) })
+    /// Plain, like the system's own widgets: flat grey, almost opaque, no glow.
+    static let native = Theme(id: "native", name: "Native", accent: 0x30D158, dark: true,
+                              tint: 0x2C2C2E, tasksTint: 0x3A3A3C, opacity: (0.97, 1))
+    static let all = [payhawkDarkGreen, payhawkDay, native]
+    static let key = "theme"
+
+    static var current: Theme {
+        all.first { $0.id == (Demo.theme ?? UserDefaults.standard.string(forKey: key)) } ?? payhawkDarkGreen
+    }
+}
+
 enum Palette {
-    static let track = Color.white.opacity(0.12)
-    static let fill = Color.white.opacity(0.45)
-    /// Outer glass: 80% dark over the blurred wallpaper, so 20% of what's behind shows through.
-    static let outerLayer = Color(red: 0.03, green: 0.05, blue: 0.10).opacity(0.8)
-    /// The task layer on top of it: 90% dark, 10% see-through.
-    static let tasksLayer = Color(red: 0.03, green: 0.05, blue: 0.10).opacity(0.9)
+    /// Text and lines on the glass: white on the dark themes, near-black on the light ones.
+    static var ink: Color { Theme.current.dark ? .white : hex(0x0F172A) }
+    /// The second line of a row, the Slack message.
+    static var muted: Color { Theme.current.dark ? hex(0x8FA3BF) : hex(0x52627A) }
+    /// A status colour on the glass: the light shade on dark glass, the deeper one on light glass.
+    static func onGlass(_ dark: UInt32, _ light: UInt32) -> Color { hex(Theme.current.dark ? dark : light) }
+    static var track: Color { ink.opacity(0.12) }
+    static var fill: Color { ink.opacity(0.45) }
+    /// Outer glass: the theme's tint over the blurred wallpaper (Payhawk: 80%, so 20% shows through).
+    static var outerLayer: Color { hex(Theme.current.tint).opacity(Theme.current.opacity.outer) }
+    /// The task layer on top of it (Payhawk: 90%, 10% see-through).
+    static var tasksLayer: Color { hex(Theme.current.tasksTint).opacity(Theme.current.opacity.tasks) }
 
     static func hex(_ value: UInt32) -> Color {
         Color(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
@@ -53,8 +122,9 @@ enum Palette {
         }
     }
 
-    /// The brand accent (config.json → brand.accent): header mark, pinned pin, week bar.
-    static var accent = hex(0x3DDC84)
+    /// The team's brand accent (config.json → brand.accent), else the theme's: header mark, pinned pin, week bar.
+    static var brandAccent: Color?
+    static var accent: Color { brandAccent ?? hex(Theme.current.accent) }
 
     static func hex(_ string: String?) -> Color? {
         guard let string, let value = UInt32(string.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) else { return nil }
@@ -96,45 +166,39 @@ struct PanelView: View {
     var open: (String) -> Void
     var resized: (CGSize) -> Void
     var refresh: () -> Void = {}
+    /// With a height of its own: how much taller the list is than its space, and how much of it is below the fold.
+    @State private var overflow = CGPoint.zero
 
     var body: some View {
         VStack(spacing: 0) {
-            Header(brand: store.snapshot?.brand, pinned: $store.pinned, refreshing: store.refreshing,
+            Header(brand: store.snapshot?.brand, count: store.snapshot?.tasks.count, pinned: $store.pinned, refreshing: store.refreshing,
                    close: { store.hidden = true }, refresh: refresh, help: { Tour.shared.current == nil ? Tour.shared.start() : Tour.shared.stop() })
             if let snapshot = store.snapshot {
-                VStack(spacing: 0) {
-                    ForEach(Array(snapshot.tasks.enumerated()), id: \.element.id) { index, task in
-                        if index > 0 { Separator() }
-                        TaskRow(task: task, open: open, tour: index == 0)
-                    }
-                    if snapshot.tasks.isEmpty {
-                        placeholder(L("Няма активни задачи", "No active tasks"))
-                    }
+                // With a height of its own the items scroll and the footer stays put; else the panel fits them.
+                if let height = store.height.map({ min($0, store.maxHeight) }) {
+                    ScrollView { items(snapshot) }
+                        .scrollIndicators(.automatic)
+                        .onScrollGeometryChange(for: CGPoint.self, of: { geo in
+                            CGPoint(x: geo.contentSize.height - geo.containerSize.height,
+                                    y: geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height)
+                        }) { _, value in overflow = value }
+                        .overlay(alignment: .bottom) {
+                            if overflow.y > 1 {  // more below: a fade and "see all", back to fitting the content
+                                SeeAll { store.height = height + overflow.x <= store.maxHeight ? nil : store.maxHeight }
+                            }
+                        }
+                } else {
+                    items(snapshot)
                 }
-                .padding(.horizontal, 6)
-                // The lift is on the layer's shape only: a shadow on the list would outline every row.
-                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.tasksLayer)
-                    .shadow(color: .white.opacity(0.06), radius: 6)
-                    .shadow(color: .black.opacity(0.3), radius: 8, y: 2))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))  // row tints reach the layer's edges
-                // Same hairline as the outer glass, brighter at the top, plus a soft lift so the layer stands out.
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.08)],
-                                                     startPoint: .top, endPoint: .bottom), lineWidth: 0.5)
-                )
-                if let slack = snapshot.slack, !slack.isEmpty {
-                    SlackList(items: slack, open: open).tourStop("slack", inset: 2)
-                    Separator().padding(.horizontal, 6)
-                }
-                Footer(stats: snapshot.stats, errors: snapshot.errors, meetings: meetings, open: open)
+                Footer(stats: snapshot.stats, errors: snapshot.errors, meetings: meetings, isOn: store.isOn, open: open)
             } else {
                 placeholder(L("Събирам данните…", "Collecting data…"))
+                if store.height != nil { Spacer(minLength: 0) }
             }
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 2)
-        .frame(width: store.width)
+        .frame(width: store.width, height: store.height.map { min($0, store.maxHeight) }, alignment: .top)
         .background(alignment: .topTrailing) {
             ZStack(alignment: .topTrailing) {
                 Glass()
@@ -143,18 +207,59 @@ struct PanelView: View {
         }
         .overlay(alignment: .bottom) { WeekLine().tourStop("week", inset: 0) }
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
-        .overlay(alignment: .trailing) { ResizeEdge(width: $store.width) }
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.ink.opacity(0.18), lineWidth: 0.5))
+        .overlay {
+            ZStack {
+                ForEach(ResizeHandle.Position.allCases, id: \.self) { position in
+                    ResizeHandle(position: position, store: store).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: position.alignment)
+                }
+            }
+        }
         .gesture(WindowDragGesture())  // drag the panel from anywhere; a click still reaches rows and icons
         .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGSize.self, of: { $0.size }, action: resized)
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
+            store.laidOutHeight = size.height
+            resized(size)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .id(store.theme)  // the colours come from the theme, not from the views' inputs: redraw them all
         .coordinateSpace(.named(Tour.space))
         .onPreferenceChange(TourFrames.self) { frames in MainActor.assumeIsolated { Tour.shared.frames = frames } }
     }
 
+    /// The tasks on their darker layer, then the Slack lines.
+    private func items(_ snapshot: Snapshot) -> some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                ForEach(Array(snapshot.tasks.enumerated()), id: \.element.id) { index, task in
+                    if index > 0 { Separator() }
+                    TaskRow(task: task, open: open, tour: index == 0)
+                }
+                if snapshot.tasks.isEmpty {
+                    placeholder(L("Няма активни задачи", "No active tasks"))
+                }
+            }
+            .padding(.horizontal, 6)
+            // The lift is on the layer's shape only: a shadow on the list would outline every row.
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.tasksLayer)
+                .shadow(color: Palette.ink.opacity(0.06), radius: 6)
+                .shadow(color: .black.opacity(0.3), radius: 8, y: 2))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))  // row tints reach the layer's edges
+            // Same hairline as the outer glass, brighter at the top, plus a soft lift so the layer stands out.
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [Palette.ink.opacity(0.22), Palette.ink.opacity(0.08)],
+                                                 startPoint: .top, endPoint: .bottom), lineWidth: 0.5)
+            )
+            if store.isOn(.slack), let slack = snapshot.slack, !slack.isEmpty {
+                SlackList(items: slack, open: open).tourStop("slack", inset: 2)
+                Separator().padding(.horizontal, 6)
+            }
+        }
+    }
+
     private func placeholder(_ text: String) -> some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+        Text(text).font(.system(size: 12)).foregroundStyle(Palette.ink.opacity(0.6))
             .frame(maxWidth: .infinity).padding(.vertical, 14)
     }
 }
@@ -164,6 +269,8 @@ struct PanelView: View {
 /// The mark is ~/.agent-widget/brand.svg when there is one.
 struct Header: View {
     var brand: Snapshot.Brand?
+    /// How many tasks the panel shows, next to the name.
+    var count: Int?
     @Binding var pinned: Bool
     var refreshing = false
     var close: () -> Void
@@ -189,15 +296,14 @@ struct Header: View {
             }
             .frame(width: 11, height: 15)
             .foregroundStyle(Palette.accent)
-            Text("TheWatcher")
+            (Text("TheWatcher").foregroundColor(Palette.ink) + Text(count.map { " (\($0))" } ?? "").foregroundColor(Palette.ink.opacity(0.5)))
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
                 .padding(.leading, 7)
             // Barely there: a spinning arc while it refreshes, still on hover as the double-click hint.
             TimelineView(.animation(paused: !refreshing)) { context in
                 Circle()
                     .trim(from: 0, to: 0.75)
-                    .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                    .stroke(Palette.ink.opacity(0.3), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                     .frame(width: 9, height: 9)
                     .rotationEffect(.degrees(refreshing ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360 : 0))
             }
@@ -206,7 +312,7 @@ struct Header: View {
             .padding(.leading, 5)
             Spacer(minLength: 8)
             (Text(Image(systemName: "person.fill")).font(.system(size: 10)).baselineOffset(1.5) + Text(" " + (Demo.isOn ? "Jamie Rivera" : NSFullUserName())).font(.system(size: 12)))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(Palette.ink.opacity(0.7))
                 .lineLimit(1)
           }
           .contentShape(Rectangle())
@@ -221,9 +327,9 @@ struct Header: View {
             Image(systemName: pinned ? "pin.fill" : "pin")
                 .font(.system(size: 10, weight: .semibold))
                 .rotationEffect(.degrees(45))
-                .foregroundStyle(pinned ? Palette.accent : .white.opacity(0.7))
+                .foregroundStyle(pinned ? Palette.accent : Palette.ink.opacity(0.7))
                 .frame(width: 18, height: 22)
-                .background(Circle().fill(Color.white.opacity(pinHovered ? 0.08 : 0)))
+                .background(Circle().fill(Palette.ink.opacity(pinHovered ? 0.08 : 0)))
                 .contentShape(Circle())
                 .padding(.leading, 10)  // the two buttons sit together, apart from the name
                 .onHover { inside in
@@ -242,9 +348,9 @@ struct Header: View {
                 .tourStop("pin", inset: 0)
             Image(systemName: "questionmark")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(Palette.ink.opacity(0.7))
                 .frame(width: 18, height: 22)
-                .background(Circle().fill(Color.white.opacity(helpHovered ? 0.08 : 0)))
+                .background(Circle().fill(Palette.ink.opacity(helpHovered ? 0.08 : 0)))
                 .contentShape(Circle())
                 .onHover { inside in
                     helpHovered = inside
@@ -261,9 +367,9 @@ struct Header: View {
                 .tourStop("help", inset: 0)
             Image(systemName: "xmark")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(Palette.ink.opacity(0.7))
                 .frame(width: 18, height: 22)
-                .background(Circle().fill(Color.white.opacity(closeHovered ? 0.08 : 0)))
+                .background(Circle().fill(Palette.ink.opacity(closeHovered ? 0.08 : 0)))
                 .contentShape(Circle())
                 .onHover { inside in
                     closeHovered = inside
@@ -295,12 +401,7 @@ struct Header: View {
 /// Still glow from the top-left corner over 80% of the panel's width and 40% of its height:
 /// blue in the corner, violet to the right, teal and green below, fading out before its edges.
 struct EdgeGlow: View {
-    static let patches: [(color: UInt32, opacity: Double, center: UnitPoint, radius: CGFloat)] = [
-        (0x3B82F6, 0.75, .topLeading, 0.65),
-        (0x8B5CF6, 0.55, UnitPoint(x: 0.55, y: 0.12), 0.5),
-        (0x14B8A6, 0.50, UnitPoint(x: 0.12, y: 0.72), 0.5),
-        (0x22C55E, 0.35, UnitPoint(x: 0.4, y: 0.55), 0.38),
-    ]
+    static var patches: [(color: UInt32, opacity: Double, center: UnitPoint, radius: CGFloat)] { Theme.current.glow }
 
     var body: some View {
         GeometryReader { geo in
@@ -319,24 +420,105 @@ struct EdgeGlow: View {
     }
 }
 
-/// The panel's right edge: drag it to make the panel wider or narrower.
-struct ResizeEdge: View {
-    static let range: ClosedRange<CGFloat> = Store.minWidth...720
-    @Binding var width: CGFloat
-    @State private var start: CGFloat?
+/// Over the bottom of a list that goes on below the fold: the list fades out into the glass, with a
+/// "see all" pill that makes the panel tall enough for all of it.
+struct SeeAll: View {
+    var action: () -> Void
+    @State private var hovered = false
 
     var body: some View {
-        Color.clear
-            .frame(width: 6)
-            .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+        ZStack(alignment: .bottom) {
+            LinearGradient(colors: [.clear, Palette.outerLayer.opacity(0.95)], startPoint: .top, endPoint: .bottom)
+                .frame(height: 44)
+                .allowsHitTesting(false)
+            HStack(spacing: 4) {
+                Text(L("виж всички", "see all"))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
             }
-            .highPriorityGesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                .onChanged { drag in
-                    let from = start ?? width
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Palette.ink.opacity(hovered ? 1 : 0.85))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(Palette.ink.opacity(hovered ? 0.2 : 0.12), in: Capsule())
+            .contentShape(Capsule())
+            .onHover { hovered = $0 }
+            .onTapGesture(perform: action)
+            .padding(.bottom, 6)
+        }
+    }
+}
+
+/// The panel's edges and corners: drag any of them to resize the panel, the cursor turning into the
+/// matching resize arrows over it. The left and top ones move the panel's corner along. Double-click an
+/// edge or corner that changes the height to fit the height to the content again.
+struct ResizeHandle: View {
+    /// Which way the edge moves: -1 left / up, 1 right / down, 0 not at all.
+    enum Position: CaseIterable {
+        case top, bottom, left, right, topLeft, topRight, bottomLeft, bottomRight
+
+        var x: Int { [.left, .topLeft, .bottomLeft].contains(self) ? -1 : [.right, .topRight, .bottomRight].contains(self) ? 1 : 0 }
+        var y: Int { [.top, .topLeft, .topRight].contains(self) ? -1 : [.bottom, .bottomLeft, .bottomRight].contains(self) ? 1 : 0 }
+        var alignment: Alignment {
+            switch self {
+            case .top: .top
+            case .bottom: .bottom
+            case .left: .leading
+            case .right: .trailing
+            case .topLeft: .topLeading
+            case .topRight: .topTrailing
+            case .bottomLeft: .bottomLeading
+            case .bottomRight: .bottomTrailing
+            }
+        }
+        var cursor: SwiftUI.FrameResizePosition {
+            switch self {
+            case .top: .top
+            case .bottom: .bottom
+            case .left: .leading
+            case .right: .trailing
+            case .topLeft: .topLeading
+            case .topRight: .topTrailing
+            case .bottomLeft: .bottomLeading
+            case .bottomRight: .bottomTrailing
+            }
+        }
+    }
+
+    static let widths: ClosedRange<CGFloat> = Store.minWidth...720
+    var position: Position
+    @ObservedObject var store: Store
+    /// Where the drag started: the mouse on the screen, the panel's frame and its height as laid out.
+    @State private var start: (mouse: NSPoint, frame: NSRect, height: CGFloat)?
+
+    var body: some View {
+        let corner = position.x != 0 && position.y != 0
+        Color.clear
+            .frame(width: position.x == 0 ? nil : corner ? 14 : 6, height: position.y == 0 ? nil : corner ? 14 : 3)
+            .frame(maxWidth: position.x == 0 ? .infinity : nil, maxHeight: position.y == 0 ? .infinity : nil)
+            .contentShape(Rectangle())
+            .pointerStyle(.frameResize(position: position.cursor))
+            .onTapGesture(count: 2) { if position.y != 0 { store.height = nil } }
+            // The screen's mouse position, not the drag's: the panel moves under it for the left and top edges.
+            .highPriorityGesture(DragGesture(minimumDistance: 1)
+                .onChanged { _ in
+                    guard let window = store.window, let screen = (window.screen ?? NSScreen.main)?.visibleFrame else { return }
+                    let mouse = NSEvent.mouseLocation
+                    let from = start ?? (mouse, window.frame, store.height ?? store.laidOutHeight)
                     start = from
-                    width = min(Self.range.upperBound, max(Self.range.lowerBound, from + drag.translation.width))
+                    var frame = from.frame
+                    if position.x != 0 {
+                        frame.size.width = min(Self.widths.upperBound, max(Self.widths.lowerBound, from.frame.width + CGFloat(position.x) * (mouse.x - from.mouse.x)))
+                        if position.x < 0 { frame.origin.x = from.frame.maxX - frame.width }
+                        store.width = frame.width
+                    }
+                    if position.y != 0 {
+                        // Up to the screen's edge on the side that moves: the top for the top edge, the bottom for the bottom one.
+                        let tallest = position.y < 0 ? from.height + screen.maxY - from.frame.maxY : from.frame.maxY - screen.minY - 8
+                        frame.size.height = min(tallest, max(Store.minHeight, from.height - CGFloat(position.y) * (mouse.y - from.mouse.y)))
+                        frame.origin.y = (position.y < 0 ? from.frame.maxY + frame.height - from.height : from.frame.maxY) - frame.height
+                        store.height = frame.height
+                    }
+                    window.setFrame(frame, display: true)  // size and corner at once, so the far edge stays put
                 }
                 .onEnded { _ in start = nil })
     }
@@ -344,7 +526,7 @@ struct ResizeEdge: View {
 
 struct Separator: View {
     var body: some View {
-        Color.white.opacity(0.08).frame(height: 0.5)
+        Palette.ink.opacity(0.08).frame(height: 0.5)
     }
 }
 
@@ -362,14 +544,16 @@ struct VisualEffect: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         // Mostly blur, little tint of its own: the see-through amount is set by Palette.outerLayer.
         let view = NSVisualEffectView()
-        view.appearance = NSAppearance(named: .vibrantDark)
+        view.appearance = NSAppearance(named: Theme.current.dark ? .vibrantDark : .vibrantLight)
         view.material = .underWindowBackground
         view.blendingMode = .behindWindow
         view.state = .active
         return view
     }
 
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.appearance = NSAppearance(named: Theme.current.dark ? .vibrantDark : .vibrantLight)
+    }
 }
 
 // MARK: - Week line
@@ -433,7 +617,7 @@ struct TaskRow: View {
         HStack(spacing: 10) {
             StatusSquare(task: task).tourStop(tour ? "status" : nil)
             VStack(alignment: .leading, spacing: 2) {
-                Text(task.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                Text(task.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                 HStack(spacing: 4) {
                     if let key = task.key {
                         Text(key)
@@ -442,7 +626,7 @@ struct TaskRow: View {
                     Text(task.note.isEmpty && task.key == nil ? L("без тикет", "no ticket") : task.note).lineLimit(1)
                 }
                 .font(.system(size: 11))
-                .foregroundStyle(Palette.hex(0x8FA3BF))
+                .foregroundStyle(Palette.muted)
                 StageLine(task: task).frame(width: 150).tourStop(tour ? "stage" : nil).padding(.top, 2)
             }
             .tourStop(tour ? "task" : nil)
@@ -461,7 +645,7 @@ struct TaskRow: View {
                                            .init(color: Palette.agent(task.agent).color.opacity(0.06), location: 0.35),
                                            .init(color: .clear, location: 0.6)],
                                    startPoint: .leading, endPoint: .trailing))
-        .background(hovered ? Color.white.opacity(0.04) : .clear)
+        .background(hovered ? Palette.ink.opacity(0.04) : .clear)
         .padding(.horizontal, -6)
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
@@ -487,12 +671,12 @@ struct StatusSquare: View {
             default: Image(systemName: "moon.fill").font(.system(size: 13))
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(Color.white)
         .frame(width: 32, height: 32)
         .background(LinearGradient(colors: [look.light, look.color], startPoint: UnitPoint(x: 0.3, y: 0), endPoint: UnitPoint(x: 0.7, y: 1)),
                     in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .strokeBorder(LinearGradient(colors: [.white.opacity(0.35), .clear, .black.opacity(0.2)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+            .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.35), .clear, .black.opacity(0.2)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
         .shadow(color: look.color.opacity(0.45), radius: 5, y: 2)
         .hoverTip(look.label, task.agent == "waiting" ? task.note : nil)
     }
@@ -563,7 +747,7 @@ struct IconButton: View {
     var body: some View {
         BrandIcon(name: name, color: color)
             .frame(width: 26, height: 26)
-            .background(Circle().fill(Color.white.opacity(hovered ? 0.08 : 0)))
+            .background(Circle().fill(Palette.ink.opacity(hovered ? 0.08 : 0)))
             .contentShape(Circle())
             .onHover { inside in
                 hovered = inside
@@ -632,21 +816,21 @@ struct SlackRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            (Text(item.channel.map { "\(item.name) · #\($0)" } ?? item.name).fontWeight(.semibold).foregroundColor(.white)
-                + Text(" · \(item.text)").foregroundColor(Palette.hex(0x8FA3BF)))
+            (Text(item.channel.map { "\(item.name) · #\($0)" } ?? item.name).fontWeight(.semibold).foregroundColor(Palette.ink)
+                + Text(" · \(item.text)").foregroundColor(Palette.muted))
                 .font(.system(size: 12))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("\(item.count)")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Palette.hex(0xF6B3C8))
+                .foregroundStyle(Palette.onGlass(0xF6B3C8, 0xBE185D))
                 .frame(minWidth: 14, minHeight: 14)
                 .padding(.horizontal, 4)
                 .background(Palette.hex(0xE01E5A).opacity(0.32), in: Capsule())
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 6)
-        .background(Color.white.opacity(hovered ? 0.05 : 0), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Palette.ink.opacity(hovered ? 0.05 : 0), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
         .hoverTip(item.channel == nil ? L("Лично съобщение", "Direct message") : L("Споменаване в #\(item.channel!)", "Mention in #\(item.channel!)"), L("клик → Slack", "click → Slack"))
@@ -668,7 +852,7 @@ struct UsagePill: View {
         let color = stale ? Palette.hex(0x6B6B6B) : used >= 0.9 ? Palette.hex(0xF87171) : used >= 0.7 ? Palette.hex(0xFB923C) : Palette.accent
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.85), lineWidth: 1)  // the footer icons' colour
+                .strokeBorder(Palette.ink.opacity(0.85), lineWidth: 1)  // the footer icons' colour
             RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                 .fill(color)
                 .frame(width: max(2, 14 * used))
@@ -700,6 +884,7 @@ struct Footer: View {
     var stats: Snapshot.Stats
     var errors: [String: String]
     @ObservedObject var meetings: Meetings
+    var isOn: (Module) -> Bool = { _ in true }
     var open: (String) -> Void
     @State private var e2eHovered = false
     @State private var prodHovered = false
@@ -718,7 +903,7 @@ struct Footer: View {
                 row(context.date, spacing: 6)
             }
             .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(Palette.ink.opacity(0.85))
             .lineLimit(1)
             .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 6))
           }
@@ -727,16 +912,18 @@ struct Footer: View {
 
     private func row(_ now: Date, spacing: CGFloat) -> some View {
         HStack(spacing: spacing) {
-            if stats.e2e != nil || errors["e2e"] != nil { e2e.tourStop("e2e") }
-            if stats.prod != nil || errors["prod"] != nil { prod(now).tourStop("prod") }
-            if stats.mobile != nil || errors["mobile"] != nil { mobile(now).tourStop("mobile") }
-            counter(icon: "arrow.triangle.pull", counts: stats.prs, title: L("Твоите PR-и", "Your PRs"), error: errors["prCounts"])
-                .tourStop("prs")
-            jiraCounter.tourStop("jira")  // "–" until Jira answers (needs the API token); hover says why
+            if isOn(.e2e), stats.e2e != nil || errors["e2e"] != nil { e2e.tourStop("e2e") }
+            if isOn(.portal), stats.prod != nil || errors["prod"] != nil { prod(now).tourStop("prod") }
+            if isOn(.mobile), stats.mobile != nil || errors["mobile"] != nil { mobile(now).tourStop("mobile") }
+            if isOn(.prs) {
+                counter(icon: "arrow.triangle.pull", counts: stats.prs, title: L("Твоите PR-и", "Your PRs"), error: errors["prCounts"])
+                    .tourStop("prs")
+            }
+            if isOn(.jira) { jiraCounter.tourStop("jira") }  // "–" until Jira answers (needs the API token); hover says why
             Spacer(minLength: 0)
             HStack(spacing: 6) {  // the limit bar sits close to the calendar
-                if let ai = stats.ai { UsagePill(usage: ai).tourStop("limit") }
-                calendar(now).tourStop("calendar")
+                if isOn(.limit), let ai = stats.ai { UsagePill(usage: ai).tourStop("limit") }
+                if isOn(.calendar) { calendar(now).tourStop("calendar") }
             }
             .fixedSize()  // never squeezed: the meeting count stays readable
         }
@@ -744,7 +931,7 @@ struct Footer: View {
 
     private var e2e: some View {
         let state = stats.e2e
-        let color: Color = state == nil ? .gray : state!.ok ? Palette.hex(0x4ADE80) : Palette.hex(0xF87171)
+        let color: Color = state == nil ? .gray : state!.ok ? Palette.onGlass(0x4ADE80, 0x16A34A) : Palette.onGlass(0xF87171, 0xDC2626)
         return HStack(spacing: 3) {
             Text("e2e").font(.system(size: 11, weight: .semibold)).foregroundStyle(color)
             if (state?.running ?? 0) > 0 {
@@ -753,7 +940,7 @@ struct Footer: View {
         }
         .padding(.horizontal, 5)
         .padding(.vertical, 2)
-        .background(Color.white.opacity(e2eHovered ? 0.08 : 0), in: Capsule())
+        .background(Palette.ink.opacity(e2eHovered ? 0.08 : 0), in: Capsule())
         .padding(.horizontal, -5)
         .onHover { e2eHovered = $0 }
         .hoverTip(e2eTitle, e2eDetail)
@@ -787,7 +974,7 @@ struct Footer: View {
         }
         .padding(.horizontal, 5)
         .padding(.vertical, 2)
-        .background(Color.white.opacity(prodHovered ? 0.08 : 0), in: Capsule())
+        .background(Palette.ink.opacity(prodHovered ? 0.08 : 0), in: Capsule())
         .padding(.horizontal, -5)
         .onHover { prodHovered = $0 }
         .hoverTip(prodTitle(now), prodDetail)
@@ -825,7 +1012,7 @@ struct Footer: View {
     private func mobile(_ now: Date) -> some View {
         let state = stats.mobile
         let e2e = state?.e2e
-        let color: Color = e2e?.lastAt == nil ? .white.opacity(0.85) : e2e!.ok ? Palette.hex(0x4ADE80) : Palette.hex(0xF87171)
+        let color: Color = e2e?.lastAt == nil ? Palette.ink.opacity(0.85) : e2e!.ok ? Palette.onGlass(0x4ADE80, 0x16A34A) : Palette.onGlass(0xF87171, 0xDC2626)
         return HStack(spacing: 4) {
             Image(systemName: "iphone").foregroundStyle(color)
             if let date = state?.date { Text(Self.age(now.timeIntervalSince(date))) }
@@ -833,7 +1020,7 @@ struct Footer: View {
         }
         .padding(.horizontal, 5)
         .padding(.vertical, 2)
-        .background(Color.white.opacity(mobileHovered ? 0.08 : 0), in: Capsule())
+        .background(Palette.ink.opacity(mobileHovered ? 0.08 : 0), in: Capsule())
         .padding(.horizontal, -5)
         .onHover { mobileHovered = $0 }
         .hoverTip(mobileTitle(now), mobileDetail)
@@ -882,7 +1069,7 @@ struct Footer: View {
         HStack(spacing: 4) {
             Image(systemName: "ticket")
             if let jira = stats.jira {
-                Text("\(jira.open)") + Text("/\(jira.month)").foregroundColor(.white.opacity(0.45))
+                Text("\(jira.open)") + Text("/\(jira.month)").foregroundColor(Palette.ink.opacity(0.45))
             } else {
                 Text("–")
             }
@@ -901,7 +1088,7 @@ struct Footer: View {
         HStack(spacing: 4) {
             Image(systemName: icon)
             if let counts {
-                Text("\(counts.week)") + Text("/\(counts.month)").foregroundColor(.white.opacity(0.45))
+                Text("\(counts.week)") + Text("/\(counts.month)").foregroundColor(Palette.ink.opacity(0.45))
             } else {
                 Text("–")
             }
@@ -941,7 +1128,7 @@ struct Footer: View {
                     .frame(width: 6, height: 6)
                     Text(L("в среща", "in a meeting"))
                 }
-                .foregroundStyle(Palette.hex(0xFCA5A5))
+                .foregroundStyle(Palette.onGlass(0xFCA5A5, 0xB91C1C))
                 .pill(Palette.hex(0xF87171))
                 .hoverTip(L("В среща: \(meeting.title)", "In a meeting: \(meeting.title)"), L("до \(meeting.end.formatted(date: .omitted, time: .shortened)) · още \(left) мин", "until \(meeting.end.formatted(date: .omitted, time: .shortened)) · \(left) min left"))
             } else if let meeting = meetings.upcoming(at: now) {
@@ -952,7 +1139,7 @@ struct Footer: View {
                     Text("·")
                     Text(L("\(minutes) мин", "\(minutes) min"))
                 }
-                .foregroundStyle(Palette.hex(0xFDBA74))
+                .foregroundStyle(Palette.onGlass(0xFDBA74, 0xC2410C))
                 .pill(Palette.hex(0xF97316))
                 .hoverTip(L("\(meeting.title) след \(minutes) мин", "\(meeting.title) in \(minutes) min"),
                           "\(meeting.start.formatted(date: .omitted, time: .shortened))–\(meeting.end.formatted(date: .omitted, time: .shortened))")
@@ -965,7 +1152,7 @@ struct Footer: View {
             }
         }
         .padding(.horizontal, 4)
-        .background(Color.white.opacity(calendarHovered ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Palette.ink.opacity(calendarHovered ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { calendarHovered = $0 }
         .onTapGesture {
             let meeting = meetings.current(at: now) ?? meetings.upcoming(at: now)

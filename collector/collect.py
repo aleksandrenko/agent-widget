@@ -34,6 +34,8 @@ def load_config():
 CONFIG = load_config()
 JIRA = CONFIG['jira']['site'].rstrip('/')
 LANG_BG = os.environ.get('THEWATCHER_LANG', 'bg') == 'bg'  # set by the app from the menu
+# Modules turned off in the menu bar menu → Modules (e2e, portal, mobile, prs, jira, limit, calendar, slack): not fetched.
+OFF = set(filter(None, os.environ.get('THEWATCHER_OFF', '').split(',')))
 
 
 def tr(bg, en):
@@ -347,6 +349,8 @@ def mobile():
 
 def slack():
     """Unread DMs + mentions from the number on Slack's Dock icon ("•" alone means only channel unreads)."""
+    if 'slack' in OFF:
+        return []
     out = subprocess.run(['lsappinfo', 'info', '-only', 'StatusLabel', 'Slack'], capture_output=True, text=True).stdout
     match = re.search(r'"label"="(\d+)"', out)
     if not match or int(match.group(1)) == 0:
@@ -358,7 +362,7 @@ def slack():
 def usage():
     """Claude plan limits from the scheduled task's file; None when missing. Older than USAGE_STALE_HOURS it is
     still passed on, marked `stale`, so the panel can say the task stopped writing it instead of going blank."""
-    if not os.path.exists(USAGE):
+    if 'limit' in OFF or not os.path.exists(USAGE):
         return None
     data = json.load(open(USAGE))
     at = dt.datetime.fromisoformat(data['at'].replace('Z', '+00:00')).timestamp()
@@ -374,7 +378,8 @@ def keychain(service):
         return ''
 
 
-def jira(extra_keys):
+def jira(extra_keys, counts=True):
+    """The tickets for the task rows, and (`counts`) my open / done-this-month counts for the footer."""
     if not JIRA:
         raise RuntimeError('Jira not configured')
     email, token = keychain('jira_email'), keychain('jira_api_token')
@@ -393,6 +398,8 @@ def jira(extra_keys):
     data = get('/rest/api/3/search/jql?' + urllib.parse.urlencode(dict(jql=jql, fields='summary,status', maxResults=100)))
     issues = {i['key']: dict(title=i['fields']['summary'], status=i['fields']['status']['name'], url=JIRA + '/browse/' + i['key'])
               for i in data.get('issues', [])}
+    if not counts:
+        return issues, None
     week, month = week_month()
     def count(jql):  # Jira counts on its side: no 100-issue page cap
         body = json.dumps(dict(jql=jql)).encode()
@@ -521,9 +528,10 @@ def main(local=False):
             errors[name] = str(e).strip()[-200:] or type(e).__name__
             return fallback
 
+    on = lambda module, f: (lambda: None) if module in OFF else f
     with cf.ThreadPoolExecutor(6) as pool:
-        fs, fp, fc, fe, fd, fm = (pool.submit(sessions), pool.submit(prs), pool.submit(pr_counts), pool.submit(e2e), pool.submit(prod),
-                                  pool.submit(mobile))
+        fs, fp, fc, fe, fd, fm = (pool.submit(sessions), pool.submit(prs), pool.submit(on('prs', pr_counts)), pool.submit(on('e2e', e2e)),
+                                  pool.submit(on('portal', prod)), pool.submit(on('mobile', mobile)))
         sess = fs.result()
         pulls = safe('github', fp, [])
         counts = safe('prCounts', fc, None)
@@ -535,7 +543,7 @@ def main(local=False):
         mobile_state = safe('mobile', fm, None)
     keys = {k for x in sess + pulls for k in x['keys']}
     try:
-        issues, closed = jira(keys)
+        issues, closed = jira(keys, counts='jira' not in OFF)
     except Exception as e:
         issues, closed, errors['jira'] = {}, None, str(e)[-200:]
     json.dump(_refs, open(REFS_CACHE, 'w'))

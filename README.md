@@ -45,13 +45,21 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 - **Calendar**: how many of today's meetings are still ahead (the one you're in counts, finished ones don't). Ten minutes before a meeting it turns into an orange `3 · 4 мин` pill; during a meeting it turns into a red `3 · в среща` pill. Click it to join the call.
 - **Week bar**: the panel's bottom edge fills in your accent colour from Monday 09:00 to Friday 18:00. Hover it for the day and the week's progress.
 
+### Size, modules and themes
+- **Resize** the panel from any edge or corner; the cursor turns into the matching arrows over it. Until you change its height by hand it fits its tasks; after that it keeps your height, the tasks scroll between the header and the footer, and a **see all** button over the fade at the bottom fits it to all of them again (so does a double-click on the top or bottom edge). The header shows how many tasks there are: `TheWatcher (8)`.
+- **Modules** in the menu bar menu turn parts of the panel on and off: e2e tests status, portal last release, mobile last release, my GitHub PRs, my monthly Jira tickets, Claude limits, my calendar meetings, Slack alerts. A module that is off isn't fetched either. To add one: a case in `Module` (`App/Model.swift`), a check where the panel draws it, and its name in the collector's `OFF` check if it fetches something.
+- **Themes** in the same menu: **Payhawk Dark Green** (the glass you see above), **Payhawk Day** (the same panel light, with dark text) and **Native** (flat grey, like the system's widgets). A team's `brand.accent` in `config.json` sets the accent in every theme.
+
+### Updates
+Once a day the app asks GitHub for the newest release. When it is newer than yours, a notification says so (click it to download the DMG) and **⬆︎ New version … — download** shows at the top of the menu bar menu. **Check for updates**, next to **About**, asks right away. To update, open the DMG and drag TheWatcher into Applications over the old one.
+
 ### Explorer
-The **?** between the pin and the ✕ (or **Explorer** in the menu bar menu) starts a tour of the panel: a bubble next to each part says what it is, with **Back** / **Next** to move along and ✕ to stop. Parts the panel isn't showing right now (no Slack, no tasks) are skipped.
+The **?** between the pin and the ✕ starts a tour of the panel: a bubble next to each part says what it is, with **Back** / **Next** to move along and ✕ to stop. Parts the panel isn't showing right now (no Slack, no tasks) are skipped.
 
 ### Pin and the menu bar icon
 Double-click the header to refresh everything now; a faint spinner next to the name turns while it does (and shows, still, while you hover the header). The pin in the header moves the panel above every window, including full-screen apps. Click it again to send the panel back to the desktop.
 
-The ✕ in the header hides the panel; while it's hidden nothing updates, and it refreshes the moment you open it again. The binoculars in the menu bar show its state, clear lenses while the panel is open and covered while it is hidden; they blink while someone wants you (an agent waiting for your answer, or unread Slack). Click them for a menu with **Open / Hide panel**, a short summary (tasks, who's waiting for you, Slack, the next meeting, e2e), **Explorer**, **Pin above all windows**, **Language** (Български / English) and **About**. To quit, use Activity Monitor or `pkill TheWatcher`; open it again from Spotlight, Apps or the Desktop icon.
+The ✕ in the header hides the panel; while it's hidden nothing updates, and it refreshes the moment you open it again. The binoculars in the menu bar show its state, clear lenses while the panel is open and covered while it is hidden; they blink while someone wants you (an agent waiting for your answer, or unread Slack). Click them for a menu with **Open / Hide panel** and **Pin above all windows** right under it (pinning also shows the panel and brings it back on screen, the way back to a panel lost under other apps), a short summary (tasks, who's waiting for you, Slack, the next meeting, e2e), **Language** (Български / English), **Modules**, **Themes**, **Setup…**, **Check for updates** and **About**. To quit, use Activity Monitor or `pkill TheWatcher`; open it again from Spotlight, Apps or the Desktop icon.
 
 ---
 

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Explorer: a walk over the panel, one bubble at a time next to the part it explains, with ‹ › to move
-/// between parts and ✕ to stop. Started from the header's ? or the menu bar menu. Parts the panel isn't
+/// between parts and ✕ to stop. Started from the header's ?. Parts the panel isn't
 /// showing right now (no Slack, no tasks) are skipped.
 @MainActor
 final class Tour: ObservableObject {

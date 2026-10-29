@@ -3,7 +3,8 @@
 A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation).
 
 ## Panel
-- One glass panel, top-left of the desktop, 360 pt wide by default (drag the right edge: 300–720 pt), radius 20. Drag it from anywhere to move it; the position is remembered.
+- One glass panel, top-left of the desktop, 400 pt wide by default, radius 20. Resize from any edge or corner (400–720 pt wide), with the system's resize cursors; the height fits the content until it is set by hand, then the tasks scroll and a fade with "see all" shows there is more. Drag it from anywhere to move it; size and position are remembered.
+- Themes: Payhawk Dark Green (below), Payhawk Day (light glass, dark text, softer glow), Native (flat grey #2C2C2E, no glow).
 - Two layers: outer glass (blurred wallpaper + dark tint), inner darker layer behind the tasks
   (radius 14), so tasks read well and stand apart from the footer.
 - Header strip, one 22 pt row: brand mark (lined up with the status squares, ~/.agent-widget/brand.svg or ✨) + "TheWatcher"; right: person icon + full name as one text, then the pin (lined up with the GitHub icons).

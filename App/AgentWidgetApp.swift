@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import ServiceManagement
 import SwiftUI
+import UserNotifications
 
 /// Background app that keeps the task panel on the desktop: it runs the collector every minute
 /// and draws the panel in a window that sits on the wallpaper, under the other windows.
@@ -17,7 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let meetings = Meetings()
     private var panel: DesktopPanel!
     private var timer: Timer?
+    private var updateTimer: Timer?
     private var collecting = false
+    /// A full collect was asked for while one was running: it runs once that one is done.
+    private var collectAgain = false
     private var pinWatch: AnyCancellable?
     private var tourWatch: AnyCancellable?
     private var statusItem: NSStatusItem?
@@ -48,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         host.sizingOptions = []
         panel = DesktopPanel(content: host)
         panel.setFrameTopLeftPoint(savedTopLeft())
+        store.window = panel
         pinWatch = store.$pinned.sink { [weak self] in self?.panel.pin($0 || Tour.shared.current != nil) }
         // During the tour the panel comes up above the windows, so the bubbles have something to point at.
         Tour.shared.panel = panel
@@ -108,14 +113,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: panel, queue: .main) { _ in
             MainActor.assumeIsolated { if Tour.shared.current != nil { Tour.shared.place() } }  // and its right edge
         }
-        meetings.start()
+        if store.isOn(.calendar) { meetings.start() }
+        UNUserNotificationCenter.current().delegate = Updater.shared  // a click on an earlier update notification
+        Updater.shared.checkIfDue()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
+            MainActor.assumeIsolated { Updater.shared.checkIfDue() }
+        }
         collect()
         timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.store.hidden else { return }  // out of sight: no updates until it's opened again
                 self.ticks += 1
                 self.collect(local: self.ticks % 4 != 0)
-                if self.ticks % 4 == 0 { self.meetings.reload(sync: true) }
+                if self.ticks % 4 == 0, self.store.isOn(.calendar) { self.meetings.reload(sync: true) }
             }
         }
     }
@@ -141,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func show(_ snapshot: Snapshot) {
-        if let accent = Palette.hex(snapshot.brand?.accent) { Palette.accent = accent }
+        Palette.brandAccent = Palette.hex(snapshot.brand?.accent)
         store.snapshot = snapshot
     }
 
@@ -200,8 +210,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let lines = NSBezierPath()
             lines.move(to: p(29.5, 34)); lines.line(to: p(34.5, 34))
-            lines.move(to: p(14, 22)); lines.line(to: p(17, 16))
-            lines.move(to: p(50, 22)); lines.line(to: p(47, 16))
+            // Short eyepieces leaning in, so it reads as binoculars.
+            lines.move(to: p(15.5, 24)); lines.line(to: p(18.5, 20))
+            lines.move(to: p(48.5, 24)); lines.line(to: p(45.5, 20))
             lines.lineWidth = 1.6
             lines.lineCapStyle = .round
             lines.stroke()
@@ -220,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Someone wants you: an agent asked you something, or Slack has unread DMs or mentions.
     private var wantsAttention: Bool {
         guard let snapshot = store.snapshot else { return false }
-        return snapshot.tasks.contains { $0.agent == "waiting" } || (snapshot.slack?.contains { $0.count > 0 } ?? false)
+        return snapshot.tasks.contains { $0.agent == "waiting" } || (store.isOn(.slack) && snapshot.slack?.contains { $0.count > 0 } == true)
     }
 
     /// While someone wants you, the eye in the menu bar blinks every few seconds.
@@ -252,11 +263,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func statusItemClicked() {
         let menu = NSMenu()
+        if let update = Updater.shared.available {
+            menu.addItem(NSMenuItem(title: L("⬆︎ Нова версия \(update.version) — изтегли", "⬆︎ New version \(update.version) — download"),
+                                    action: #selector(downloadUpdate), keyEquivalent: ""))
+            menu.addItem(.separator())
+        }
         if store.hidden {
             menu.addItem(NSMenuItem(title: L("Отвори панела", "Open panel"), action: #selector(openPanel), keyEquivalent: ""))
         } else {
             menu.addItem(NSMenuItem(title: L("Скрий панела", "Hide panel"), action: #selector(hidePanel), keyEquivalent: ""))
         }
+        // Right under Open: the way back to a panel lost under other apps' windows.
+        let pin = NSMenuItem(title: L("Закачи над всички прозорци", "Pin above all windows"), action: #selector(togglePin), keyEquivalent: "")
+        pin.state = store.pinned ? .on : .off
+        menu.addItem(pin)
         menu.addItem(.separator())
         for line in summary() {
             let info = NSMenuItem(title: line, action: nil, keyEquivalent: "")
@@ -264,10 +284,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(info)
         }
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: L("Explorer: какво е всяко нещо", "Explorer: what each part is"), action: #selector(startTour), keyEquivalent: ""))
-        let pin = NSMenuItem(title: L("Закачи над всички прозорци", "Pin above all windows"), action: #selector(togglePin), keyEquivalent: "")
-        pin.state = store.pinned ? .on : .off
-        menu.addItem(pin)
         let language = NSMenuItem(title: L("Език", "Language"), action: nil, keyEquivalent: "")
         language.submenu = NSMenu()
         for lang in Lang.allCases {
@@ -278,8 +294,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             language.submenu?.addItem(item)
         }
         menu.addItem(language)
+        let modules = NSMenuItem(title: L("Модули", "Modules"), action: nil, keyEquivalent: "")
+        modules.submenu = NSMenu()
+        for module in Module.allCases {
+            let item = NSMenuItem(title: module.name, action: #selector(toggleModule(_:)), keyEquivalent: "")
+            item.representedObject = module.rawValue
+            item.state = store.isOn(module) ? .on : .off
+            item.target = self
+            modules.submenu?.addItem(item)
+        }
+        menu.addItem(modules)
+        let themes = NSMenuItem(title: L("Теми", "Themes"), action: nil, keyEquivalent: "")
+        themes.submenu = NSMenu()
+        for theme in Theme.all {
+            let item = NSMenuItem(title: theme.name, action: #selector(pickTheme(_:)), keyEquivalent: "")
+            item.representedObject = theme.id
+            item.state = theme.id == store.theme ? .on : .off
+            item.target = self
+            themes.submenu?.addItem(item)
+        }
+        menu.addItem(themes)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: L("Настройка…", "Setup…"), action: #selector(showSetup), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: L("Провери за нова версия", "Check for updates"), action: #selector(checkForUpdates), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: L("За TheWatcher", "About TheWatcher"), action: #selector(about), keyEquivalent: ""))
         for item in menu.items where item.action != nil { item.target = self }
         statusItem?.menu = menu
@@ -294,15 +331,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let waiting = tasks.filter { $0.agent == "waiting" }.count
         let working = tasks.filter { $0.agent == "working" }.count
         var lines = [L("\(tasks.count) задачи · \(working) работят · \(waiting) чакат теб", "\(tasks.count) tasks · \(working) working · \(waiting) waiting for you")]
-        if let unread = snapshot.slack?.reduce(0, { $0 + $1.count }), unread > 0 { lines.append(L("Slack: \(unread) непрочетени", "Slack: \(unread) unread")) }
+        if store.isOn(.slack), let unread = snapshot.slack?.reduce(0, { $0 + $1.count }), unread > 0 { lines.append(L("Slack: \(unread) непрочетени", "Slack: \(unread) unread")) }
         let now = Date()
-        if let meeting = meetings.current(at: now) {
-            lines.append(L("В среща: \(meeting.title) до \(meeting.end.formatted(date: .omitted, time: .shortened))", "In a meeting: \(meeting.title) until \(meeting.end.formatted(date: .omitted, time: .shortened))"))
-        } else if let next = meetings.today.first(where: { $0.start > now }) {
-            lines.append(L("Следва: \(next.title) в \(next.start.formatted(date: .omitted, time: .shortened))", "Next: \(next.title) at \(next.start.formatted(date: .omitted, time: .shortened))"))
+        if store.isOn(.calendar) {
+            if let meeting = meetings.current(at: now) {
+                lines.append(L("В среща: \(meeting.title) до \(meeting.end.formatted(date: .omitted, time: .shortened))", "In a meeting: \(meeting.title) until \(meeting.end.formatted(date: .omitted, time: .shortened))"))
+            } else if let next = meetings.today.first(where: { $0.start > now }) {
+                lines.append(L("Следва: \(next.title) в \(next.start.formatted(date: .omitted, time: .shortened))", "Next: \(next.title) at \(next.start.formatted(date: .omitted, time: .shortened))"))
+            }
         }
-        if let e2e = snapshot.stats.e2e { lines.append(e2e.running > 0 ? L("e2e: върви", "e2e: running") : e2e.ok ? L("e2e: зелено", "e2e: green") : L("e2e: червено", "e2e: red")) }
-        if let prod = snapshot.stats.prod, let date = prod.date {
+        if store.isOn(.e2e), let e2e = snapshot.stats.e2e { lines.append(e2e.running > 0 ? L("e2e: върви", "e2e: running") : e2e.ok ? L("e2e: зелено", "e2e: green") : L("e2e: червено", "e2e: red")) }
+        if store.isOn(.portal), let prod = snapshot.stats.prod, let date = prod.date {
             lines.append(prod.running ? L("prod: качва се", "prod: deploying") : "prod: \(Footer.age(Date().timeIntervalSince(date)))")
         }
         return lines
@@ -330,19 +369,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrameTopLeftPoint(NSPoint(x: screen.minX + 16, y: screen.maxY - 12))
     }
 
-    /// Opens the panel if it's hidden, then walks over it once it's laid out.
-    @objc private func startTour() {
-        if store.hidden { store.hidden = false }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { Tour.shared.start() }
-    }
-
+    /// Pinning also shows a hidden panel and brings it back from a display that's gone, so it ends up in sight.
     @objc private func togglePin() {
         store.pinned.toggle()
+        guard store.pinned else { return }
+        if store.hidden { store.hidden = false } else { bringOnScreen() }
     }
 
     private func refreshNow() {
         collect()
-        meetings.reload(sync: true)
+        if store.isOn(.calendar) { meetings.reload(sync: true) }
     }
 
     /// First launch: a link to the app on the Desktop, as the installer used to make.
@@ -411,6 +447,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "TheWatcher", .credits: credits])
     }
 
+    /// A module on or off: it leaves the panel now, and the collector stops (or starts) fetching it.
+    @objc private func toggleModule(_ sender: NSMenuItem) {
+        guard let module = (sender.representedObject as? String).flatMap(Module.init(rawValue:)) else { return }
+        if store.modulesOff.contains(module) { store.modulesOff.remove(module) } else { store.modulesOff.insert(module) }
+        if module == .calendar, store.isOn(.calendar) { meetings.start() }  // asks for access the first time
+        updateBlink()
+        refreshNow()
+    }
+
+    @objc private func downloadUpdate() {
+        Updater.shared.download()
+    }
+
+    /// Asks GitHub now; says what it found, since a check that finds nothing is otherwise silent.
+    @objc private func checkForUpdates() {
+        Task {
+            let reached = await Updater.shared.check()
+            // Off the Task: a modal alert inside it would hold up every other main-thread job (the collector, the panel).
+            RunLoop.main.perform { MainActor.assumeIsolated { self.showUpdateAlert(reached: reached) } }
+        }
+    }
+
+    private func showUpdateAlert(reached: Bool) {
+        let alert = NSAlert()
+        if !reached {
+            alert.messageText = L("Не успях да стигна до GitHub", "Couldn't reach GitHub")
+            alert.informativeText = L("Опитай пак по-късно.", "Try again later.")
+        } else if let update = Updater.shared.available {
+            alert.messageText = L("Има нова версия: \(update.version)", "A new version is out: \(update.version)")
+            alert.informativeText = L("Имаш \(Updater.installed). Изтегли DMG-а, отвори го и пусни TheWatcher в Applications върху стария.",
+                                      "You have \(Updater.installed). Download the DMG, open it and drag TheWatcher into Applications over the old one.")
+            alert.addButton(withTitle: L("Изтегли", "Download"))
+            alert.addButton(withTitle: L("По-късно", "Later"))
+        } else {
+            alert.messageText = L("Имаш последната версия (\(Updater.installed))", "You have the latest version (\(Updater.installed))")
+        }
+        NSApp.activate()
+        if alert.runModal() == .alertFirstButtonReturn, Updater.shared.available != nil { Updater.shared.download() }
+    }
+
+    @objc private func pickTheme(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        store.theme = id
+    }
+
     /// Switches the panel and menus now; the collector's own texts follow on its next run.
     @objc private func pickLanguage(_ sender: NSMenuItem) {
         guard let lang = (sender.representedObject as? String).flatMap(Lang.init(rawValue:)) else { return }
@@ -438,7 +519,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func collect(local: Bool = false) {
-        guard !collecting else { return }
+        guard !collecting else {
+            if !local { collectAgain = true }
+            return
+        }
         collecting = true
         if !local { store.refreshing = true }
         let home = NSHomeDirectory()
@@ -446,14 +530,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         process.executableURL = URL(fileURLWithPath: Setup.python)
         process.arguments = [Self.collector] + (local ? ["--local"] : [])
         process.environment = ["HOME": home, "USER": NSUserName(), "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
-                               "THEWATCHER_LANG": Lang.current.rawValue]
+                               "THEWATCHER_LANG": Lang.current.rawValue,
+                               "THEWATCHER_OFF": store.modulesOff.map(\.rawValue).sorted().joined(separator: ",")]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle(forWritingAtPath: "\(home)/.agent-widget/collect.log") ?? FileHandle.nullDevice
         process.terminationHandler = { [weak self] _ in
             Task { @MainActor in
-                self?.collecting = false
-                self?.store.refreshing = false
-                if let snapshot = Snapshot.load() { self?.show(snapshot) }
+                guard let self else { return }
+                self.collecting = false
+                self.store.refreshing = false
+                if let snapshot = Snapshot.load() { self.show(snapshot) }
+                if self.collectAgain {
+                    self.collectAgain = false
+                    self.collect()
+                }
             }
         }
         do {
@@ -473,6 +563,8 @@ enum Demo {
     static let snapshotPath = value(of: "--snapshot")
     static let setupSnapshotPath = value(of: "--setup-snapshot")
     static let tourStep = value(of: "--tour").flatMap(Int.init)
+    /// --theme ID: the demo in that theme (payhawk-dark-green, payhawk-day, native).
+    static let theme = value(of: "--theme")
     static var isOn: Bool { directory != nil }
 
     private static func value(of flag: String) -> String? {
@@ -503,7 +595,7 @@ final class DesktopPanel: NSPanel {
     func pin(_ pinned: Bool) {
         level = pinned ? .floating : NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, pinned ? .fullScreenAuxiliary : .fullScreenNone]
-        orderFrontRegardless()
+        if isVisible { orderFrontRegardless() }  // a hidden panel stays hidden
     }
 
     /// Keeps the top-left corner in place when the content grows or shrinks.
