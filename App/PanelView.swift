@@ -858,7 +858,7 @@ struct Footer: View {
             if let recent = e2e.recent { lines.append(L("\(e2e.passed ?? 0) от последните \(recent) минаха", "\(e2e.passed ?? 0) of the last \(recent) passed")) }
             if e2e.running > 0 { lines.append(L("\(e2e.running) вървят в момента", "\(e2e.running) running now")) }
         }
-        lines.append(L("\nклик → версията в GitHub", "\nclick → the release on GitHub"))
+        lines.append(L("\nклик → таговете в GitHub", "\nclick → the tags on GitHub"))
         return lines.joined(separator: "\n")
     }
 

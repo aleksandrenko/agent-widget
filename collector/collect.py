@@ -341,7 +341,7 @@ def mobile():
         r['status'] in ('in_progress', 'queued') for r in json.loads(sh(['gh', 'run', 'list', '-R', repo, '--workflow', str(cfg['promoteWorkflow']),
                                                            '-L', '5', '--json', 'status'])))
     e2e_state = workflow_runs(repo, cfg['e2eWorkflow'], branch=cfg['e2eBranch']) if cfg['e2eWorkflow'] else None
-    return dict(tag=tag, at=at.replace('+00:00', 'Z'), url=f'https://github.com/{repo}/releases/tag/{tag}', running=running,
+    return dict(tag=tag, at=at.replace('+00:00', 'Z'), url=f'https://github.com/{repo}/tags', running=running,
                 candidate=newer[-1] if newer else None, e2e=e2e_state)
 
 
