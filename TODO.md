@@ -1,11 +1,11 @@
 # TODO
 
-- [ ] **Claude limit не се показва** — квотата на Claude липсва във футъра. Да се открие защо и да се оправи.
-- [ ] **Календарът показва несъществуващи събития** — на панела излиза събитие, което го няма в календара. Да се провери дали не се ползват стари/кеширани данни и дали нови и променени събития изобщо се проверяват.
-- [ ] **Календар: само предстоящите за днес** — броят да включва само днешните събития, които още предстоят; минали да не се броят.
-- [ ] **Мобилно: e2e и деплоймент** — да се добавят e2e тестовете и деплойментът на мобилното приложение (като `e2e` и prod индикатора във футъра).
-- [ ] **Explorer режим (обиколка на UI-а)**
-  - Нова точка „Explorer“ в менюто на иконата в менюбара.
-  - Нова иконка `?` в хедъра, между пина и `✕`.
-  - При натискане се пуска режим, в който до всеки елемент на панела излиза балонче с обяснение какво е.
-  - Всяко балонче има Prev / Next (към предишния / следващия елемент) и `✕`, който спира режима.
+- [ ] **Claude limit is missing**: the Claude quota doesn't show in the footer. Find out why and fix it.
+- [ ] **Calendar shows events that don't exist**: the panel shows an event that isn't in the calendar. Check whether it uses stale/cached data and whether new and changed events are checked at all.
+- [ ] **Calendar: only today's upcoming events**: the count should include only today's events that are still ahead; past ones aren't counted.
+- [ ] **Mobile: e2e and deployment**: add the mobile app's e2e tests and deployment (like the `e2e` and prod indicators in the footer).
+- [ ] **Explorer mode (UI tour)**
+  - New "Explorer" item in the menu bar icon's menu.
+  - New `?` icon in the header, between the pin and the `✕`.
+  - Clicking it starts a mode where a bubble next to each element of the panel explains what it is.
+  - Each bubble has Prev / Next (to the previous / next element) and an `✕` that ends the mode.
