@@ -18,7 +18,8 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 - Blink: lids sweep across the lenses and back every 3.5 s while an agent waits for you or Slack has unread.
 - App icon: minimal green binoculars (two rings, a bridge, two eyepiece ticks) on the dark glass tile.
 - Any click opens a menu: Open / Hide panel, summary lines (tasks · working · waiting, Slack, next meeting, e2e), pin, language (Български / English), about.
-- Header: ✕ after the pin hides the panel (remembered across restarts). Hidden = no updates; opening refreshes at once.
+- Header: ? after the pin starts the Explorer tour: one bubble beside the panel per part (title, text, n / N, Back, Next, ✕), the part outlined in the accent colour; the panel comes up above the windows while it runs.
+- Header: ✕ after the ? hides the panel (remembered across restarts). Hidden = no updates; opening refreshes at once.
 
 ## Task row (one list, hairline separators, light hover on the whole row)
 - 32 pt status square, icon only, glossy: light-to-dark gradient, light top edge, glow in its colour.
@@ -32,6 +33,7 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 
 ## Footer (11 pt)
 - `e2e` text, green/red by the last run of the configured e2e workflow; blinking round clock while one runs. Click → that run.
+- Safari icon + age of the last web prod release; iPhone icon (green/red by the mobile e2e) + age of the last store release.
 - PRs created week/month.
 - Right: a small rounded outline (18 × 9 pt, border in the footer icon colour, 6 pt from the calendar) filling up with the Claude 5-hour limit used; green, orange past 70%, red past 90%; hover shows just the %. Then the calendar with today's meeting count. 10 min before a meeting: orange pill "3 · 4 мин";
   during one: red pill "3 · в среща" with a blinking dot. Click → meeting link, else Google Calendar.

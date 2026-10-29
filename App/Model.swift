@@ -38,14 +38,17 @@ struct Snapshot: Decodable {
         var jira: JiraCounts?
         var e2e: E2E?
         var prod: Prod?
+        var mobile: Mobile?
         var ai: Usage?
     }
 
-    /// Claude plan limits, from the birdwatcher-usage scheduled task (refreshed every 30 min).
+    /// Claude plan limits, from the birdwatcher-usage scheduled task (every 15 min on weekdays).
     struct Usage: Decodable {
         var at: Double
         var fiveHour: Window
         var weekly: Window?
+        /// Older than 3 hours: the task has stopped writing it (or it's after hours).
+        var stale: Bool?
 
         struct Window: Decodable {
             var percent: Double
@@ -112,6 +115,18 @@ struct Snapshot: Decodable {
             var title: String
             var mine: Bool
         }
+
+        var date: Date? { ISO8601DateFormatter().date(from: at) }
+    }
+
+    /// The mobile app's newest store release, the candidate waiting after it, and its e2e runs.
+    struct Mobile: Decodable {
+        var tag: String
+        var at: String
+        var url: String?
+        var running: Bool
+        var candidate: String?
+        var e2e: E2E?
 
         var date: Date? { ISO8601DateFormatter().date(from: at) }
     }

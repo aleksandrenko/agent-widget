@@ -35,14 +35,46 @@ final class Meetings: ObservableObject {
         }
     }
 
-    func reload() {
+    /// `sync`: also asks the calendar accounts to fetch from their servers; what changed there arrives
+    /// as EKEventStoreChanged and reloads again. Without it a long-running app can keep showing a
+    /// meeting that was moved or cancelled hours ago.
+    func reload(sync: Bool = false) {
         guard access else { return }
-        let day = Calendar.current.startOfDay(for: Date())
-        let predicate = store.predicateForEvents(withStart: day, end: day.addingTimeInterval(86400), calendars: nil)
-        today = store.events(matching: predicate)
-            .filter { !$0.isAllDay && $0.availability != .free && !declined($0) && ($0.attendees?.count ?? 0) > 0 }
+        if sync { store.refreshSourcesIfNecessary() }
+        var seen = Set<String>()
+        today = events()
+            .filter(isMeeting)
             .sorted { $0.startDate < $1.startDate }
+            // One meeting is on your calendar and on every colleague's calendar you've added: count it once.
+            .filter { seen.insert("\($0.calendarItemExternalIdentifier ?? $0.eventIdentifier ?? "")|\($0.startDate.timeIntervalSince1970)").inserted }
             .map { Meeting(id: $0.eventIdentifier, title: $0.title ?? L("Среща", "Meeting"), start: $0.startDate, end: $0.endDate, url: link($0)) }
+    }
+
+    private func events() -> [EKEvent] {
+        let day = Calendar.current.startOfDay(for: Date())
+        return store.events(matching: store.predicateForEvents(withStart: day, end: day.addingTimeInterval(86400), calendars: nil))
+    }
+
+    /// A meeting of yours: not all-day, not *free*, with attendees, and you are one of them (or organise it)
+    /// and haven't declined. Events on calendars shared with you, where you aren't invited, are someone
+    /// else's meetings.
+    private func isMeeting(_ event: EKEvent) -> Bool {
+        guard !event.isAllDay, event.availability != .free, let attendees = event.attendees, !attendees.isEmpty else { return false }
+        if let me = attendees.first(where: \.isCurrentUser) { return me.participantStatus != .declined }
+        return event.organizer?.isCurrentUser == true
+    }
+
+    /// Every event today with why it is or isn't counted, to check against the Calendar app
+    /// (agentwidget://snapshot writes it to ~/.agent-widget/meetings.json).
+    func diagnostics() -> [[String: String]] {
+        events().map { event in
+            let me = event.attendees?.first(where: \.isCurrentUser)
+            return ["title": event.title ?? "", "start": event.startDate.description, "end": event.endDate.description,
+                    "calendar": "\(event.calendar.title) (\(event.calendar.source.title))",
+                    "attendees": "\(event.attendees?.count ?? 0)", "me": me.map { "\($0.participantStatus.rawValue)" } ?? "-",
+                    "organizer": event.organizer?.isCurrentUser == true ? "me" : event.organizer?.name ?? "-",
+                    "modified": event.lastModifiedDate?.description ?? "-", "shown": isMeeting(event) ? "yes" : "no"]
+        }
     }
 
     /// Demo meetings: [{"title": "Planning", "startsIn": 4, "minutes": 30}], minutes relative to now.
@@ -58,12 +90,11 @@ final class Meetings: ObservableObject {
 
     func current(at now: Date) -> Meeting? { today.first { $0.start <= now && now < $0.end } }
 
+    /// Today's meetings that haven't ended yet: the one you're in and the ones to come.
+    func remaining(at now: Date) -> [Meeting] { today.filter { $0.end > now } }
+
     func upcoming(at now: Date) -> Meeting? {
         today.first { $0.start > now && $0.start.timeIntervalSince(now) <= Self.warnBefore }
-    }
-
-    private func declined(_ event: EKEvent) -> Bool {
-        event.attendees?.contains { $0.isCurrentUser && $0.participantStatus == .declined } ?? false
     }
 
     /// The video call link: the event URL, or the first Meet/Zoom/Teams link in the notes or location.

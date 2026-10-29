@@ -100,12 +100,12 @@ struct PanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             Header(brand: store.snapshot?.brand, pinned: $store.pinned, refreshing: store.refreshing,
-                   close: { store.hidden = true }, refresh: refresh)
+                   close: { store.hidden = true }, refresh: refresh, help: { Tour.shared.current == nil ? Tour.shared.start() : Tour.shared.stop() })
             if let snapshot = store.snapshot {
                 VStack(spacing: 0) {
                     ForEach(Array(snapshot.tasks.enumerated()), id: \.element.id) { index, task in
                         if index > 0 { Separator() }
-                        TaskRow(task: task, open: open)
+                        TaskRow(task: task, open: open, tour: index == 0)
                     }
                     if snapshot.tasks.isEmpty {
                         placeholder(L("Няма активни задачи", "No active tasks"))
@@ -124,7 +124,7 @@ struct PanelView: View {
                                                      startPoint: .top, endPoint: .bottom), lineWidth: 0.5)
                 )
                 if let slack = snapshot.slack, !slack.isEmpty {
-                    SlackList(items: slack, open: open)
+                    SlackList(items: slack, open: open).tourStop("slack", inset: 2)
                     Separator().padding(.horizontal, 6)
                 }
                 Footer(stats: snapshot.stats, errors: snapshot.errors, meetings: meetings, open: open)
@@ -141,7 +141,7 @@ struct PanelView: View {
                 EdgeGlow()
             }
         }
-        .overlay(alignment: .bottom) { WeekLine() }
+        .overlay(alignment: .bottom) { WeekLine().tourStop("week", inset: 0) }
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
         .overlay(alignment: .trailing) { ResizeEdge(width: $store.width) }
@@ -149,6 +149,8 @@ struct PanelView: View {
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: resized)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .coordinateSpace(.named(Tour.space))
+        .onPreferenceChange(TourFrames.self) { frames in MainActor.assumeIsolated { Tour.shared.frames = frames } }
     }
 
     private func placeholder(_ text: String) -> some View {
@@ -157,7 +159,8 @@ struct PanelView: View {
     }
 }
 
-/// Top strip: the brand mark and name on the left, the Mac user's full name and the pin on the right.
+/// Top strip: the brand mark and name on the left, the Mac user's full name, the pin, the Explorer ? and
+/// the ✕ on the right.
 /// The mark is ~/.agent-widget/brand.svg when there is one.
 struct Header: View {
     var brand: Snapshot.Brand?
@@ -165,7 +168,9 @@ struct Header: View {
     var refreshing = false
     var close: () -> Void
     var refresh: () -> Void
+    var help: () -> Void = {}
     @State private var pinHovered = false
+    @State private var helpHovered = false
     @State private var closeHovered = false
     @State private var headerHovered = false
 
@@ -205,6 +210,7 @@ struct Header: View {
                 .lineLimit(1)
           }
           .contentShape(Rectangle())
+          .tourStop("header")
           .hoverTip(L("Двоен клик → обнови данните сега", "Double-click → refresh now"), L("сесии, PR-и, Slack и срещи", "sessions, PRs, Slack and meetings"))
           .onHover { headerHovered = $0 }
           .onTapGesture(count: 2) {
@@ -233,6 +239,26 @@ struct Header: View {
                     pinned.toggle()
                     Tooltip.shared.hide()
                 }
+                .tourStop("pin", inset: 0)
+            Image(systemName: "questionmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(width: 18, height: 22)
+                .background(Circle().fill(Color.white.opacity(helpHovered ? 0.08 : 0)))
+                .contentShape(Circle())
+                .onHover { inside in
+                    helpHovered = inside
+                    if inside {
+                        Tooltip.shared.show(title: "Explorer", detail: L("клик → обиколка: какво е всяко нещо на панела", "click → a tour of what each part of the panel is"))
+                    } else {
+                        Tooltip.shared.hide()
+                    }
+                }
+                .onTapGesture {
+                    Tooltip.shared.hide()
+                    help()
+                }
+                .tourStop("help", inset: 0)
             Image(systemName: "xmark")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.white.opacity(0.7))
@@ -249,8 +275,10 @@ struct Header: View {
                 }
                 .onTapGesture {
                     Tooltip.shared.hide()
+                    Tour.shared.stop()
                     close()
                 }
+                .tourStop("close", inset: 0)
         }
         .frame(height: 22)
         .padding(EdgeInsets(top: 9, leading: 10, bottom: 7, trailing: 11))
@@ -397,11 +425,13 @@ struct WeekLine: View {
 struct TaskRow: View {
     var task: TaskItem
     var open: (String) -> Void
+    /// The first row: its parts are the tour's task stops.
+    var tour = false
     @State private var hovered = false
 
     var body: some View {
         HStack(spacing: 10) {
-            StatusSquare(task: task)
+            StatusSquare(task: task).tourStop(tour ? "status" : nil)
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
                 HStack(spacing: 4) {
@@ -413,14 +443,16 @@ struct TaskRow: View {
                 }
                 .font(.system(size: 11))
                 .foregroundStyle(Palette.hex(0x8FA3BF))
-                StageLine(task: task).frame(width: 150).padding(.top, 2)
+                StageLine(task: task).frame(width: 150).tourStop(tour ? "stage" : nil).padding(.top, 2)
             }
+            .tourStop(tour ? "task" : nil)
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 3) {
                 IconButton(name: "github", color: Palette.github(task.github?.state ?? "none").color,
                            tip: ("GitHub: \(githubTitle)", Palette.github(task.github?.state ?? "none").meaning)) {
                     task.github.map { open($0.url) }
                 }
+                .tourStop(tour ? "github" : nil, inset: 0)
             }
         }
         .padding(.vertical, 8)
@@ -626,12 +658,14 @@ struct SlackRow: View {
 
 /// How much of the Claude 5-hour session limit is used: a small rounded outline (18 × 9 pt) that
 /// fills up as the limit is used, green, then orange past 70%, red past 90%. Hover shows the %.
+/// Grey when the reading is over 3 hours old: the scheduled task that writes it isn't running.
 struct UsagePill: View {
     var usage: Snapshot.Usage
 
     var body: some View {
         let used = min(1, max(0, usage.fiveHour.percent / 100))
-        let color = used >= 0.9 ? Palette.hex(0xF87171) : used >= 0.7 ? Palette.hex(0xFB923C) : Palette.accent
+        let stale = usage.stale == true
+        let color = stale ? Palette.hex(0x6B6B6B) : used >= 0.9 ? Palette.hex(0xF87171) : used >= 0.7 ? Palette.hex(0xFB923C) : Palette.accent
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.85), lineWidth: 1)  // the footer icons' colour
@@ -641,11 +675,26 @@ struct UsagePill: View {
                 .padding(2)
         }
         .frame(width: 18, height: 9)
-        .hoverTip("\(Int(usage.fiveHour.percent))%")
+        .opacity(stale ? 0.5 : 1)
+        .hoverTip(stale ? L("Лимит на Claude: \(Int(usage.fiveHour.percent))% (старо)", "Claude limit: \(Int(usage.fiveHour.percent))% (old)") : "\(Int(usage.fiveHour.percent))%",
+                  stale ? L("последно прочетено \(Footer.age(Date().timeIntervalSince1970 - usage.at)) назад;\nзадачата birdwatcher-usage не го обновява",
+                            "last read \(Footer.age(Date().timeIntervalSince1970 - usage.at)) ago;\nthe birdwatcher-usage task isn't updating it") : nil)
     }
 }
 
 // MARK: - Footer
+
+/// The blinking round clock next to something that is running now (an e2e run, a deploy).
+struct RunningClock: View {
+    var body: some View {
+        TimelineView(.animation) { context in
+            Image(systemName: "clock")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Palette.hex(0x60A5FA))
+                .opacity(0.6 + 0.4 * cos(context.date.timeIntervalSinceReferenceDate * .pi / 0.6))
+        }
+    }
+}
 
 struct Footer: View {
     var stats: Snapshot.Stats
@@ -654,16 +703,19 @@ struct Footer: View {
     var open: (String) -> Void
     @State private var e2eHovered = false
     @State private var prodHovered = false
+    @State private var mobileHovered = false
     @State private var calendarHovered = false
     static let calendarWeb = "https://calendar.google.com/calendar/r/day"
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
           VStack(spacing: 0) {
-            // Roomy gaps when the panel is wide enough, the old tighter ones when it isn't.
+            // Roomy gaps when the panel is wide enough, tighter ones as it gets narrower.
             ViewThatFits(in: .horizontal) {
                 row(context.date, spacing: 21)
                 row(context.date, spacing: 14)
+                row(context.date, spacing: 9)
+                row(context.date, spacing: 6)
             }
             .font(.system(size: 11))
             .foregroundStyle(.white.opacity(0.85))
@@ -675,15 +727,18 @@ struct Footer: View {
 
     private func row(_ now: Date, spacing: CGFloat) -> some View {
         HStack(spacing: spacing) {
-            if stats.e2e != nil || errors["e2e"] != nil { e2e }
-            if stats.prod != nil || errors["prod"] != nil { prod(now) }
+            if stats.e2e != nil || errors["e2e"] != nil { e2e.tourStop("e2e") }
+            if stats.prod != nil || errors["prod"] != nil { prod(now).tourStop("prod") }
+            if stats.mobile != nil || errors["mobile"] != nil { mobile(now).tourStop("mobile") }
             counter(icon: "arrow.triangle.pull", counts: stats.prs, title: L("Твоите PR-и", "Your PRs"), error: errors["prCounts"])
-            jiraCounter  // "–" until Jira answers (needs the API token); hover says why
+                .tourStop("prs")
+            jiraCounter.tourStop("jira")  // "–" until Jira answers (needs the API token); hover says why
             Spacer(minLength: 0)
             HStack(spacing: 6) {  // the limit bar sits close to the calendar
-                if let ai = stats.ai { UsagePill(usage: ai) }
-                calendar(now)
+                if let ai = stats.ai { UsagePill(usage: ai).tourStop("limit") }
+                calendar(now).tourStop("calendar")
             }
+            .fixedSize()  // never squeezed: the meeting count stays readable
         }
     }
 
@@ -693,12 +748,7 @@ struct Footer: View {
         return HStack(spacing: 3) {
             Text("e2e").font(.system(size: 11, weight: .semibold)).foregroundStyle(color)
             if (state?.running ?? 0) > 0 {
-                TimelineView(.animation) { context in
-                    Image(systemName: "clock")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Palette.hex(0x60A5FA))
-                        .opacity(0.6 + 0.4 * cos(context.date.timeIntervalSinceReferenceDate * .pi / 0.6))
-                }
+                RunningClock()
             }
         }
         .padding(.horizontal, 5)
@@ -732,12 +782,7 @@ struct Footer: View {
             Image(systemName: "safari")
             if let date { Text(Self.age(now.timeIntervalSince(date))) }
             if state?.running == true {
-                TimelineView(.animation) { context in
-                    Image(systemName: "clock")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Palette.hex(0x60A5FA))
-                        .opacity(0.6 + 0.4 * cos(context.date.timeIntervalSinceReferenceDate * .pi / 0.6))
-                }
+                RunningClock()
             }
         }
         .padding(.horizontal, 5)
@@ -772,6 +817,48 @@ struct Footer: View {
             if total - mine.count > others.count { lines.append(L("+\(total - mine.count - others.count) още", "+\(total - mine.count - others.count) more")) }
         }
         lines.append(L("\nклик → release notes", "\nclick → release notes"))
+        return lines.joined(separator: "\n")
+    }
+
+    /// Phone icon, green or red by the mobile e2e workflow's last run, + how long the newest store release
+    /// has been out; the clock blinks while a release candidate is being promoted or an e2e run is going.
+    private func mobile(_ now: Date) -> some View {
+        let state = stats.mobile
+        let e2e = state?.e2e
+        let color: Color = e2e?.lastAt == nil ? .white.opacity(0.85) : e2e!.ok ? Palette.hex(0x4ADE80) : Palette.hex(0xF87171)
+        return HStack(spacing: 4) {
+            Image(systemName: "iphone").foregroundStyle(color)
+            if let date = state?.date { Text(Self.age(now.timeIntervalSince(date))) }
+            if state?.running == true || (e2e?.running ?? 0) > 0 { RunningClock() }
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Color.white.opacity(mobileHovered ? 0.08 : 0), in: Capsule())
+        .padding(.horizontal, -5)
+        .onHover { mobileHovered = $0 }
+        .hoverTip(mobileTitle(now), mobileDetail)
+        .onTapGesture { state?.url.map(open) }
+    }
+
+    private func mobileTitle(_ now: Date) -> String {
+        guard let state = stats.mobile, let date = state.date else { return L("Мобилно: няма данни", "Mobile: no data") }
+        if state.running { return L("Мобилно: нова версия се пуска в магазините", "Mobile: a new version is going to the stores") }
+        let age = Self.age(now.timeIntervalSince(date))
+        return L("Мобилно: в магазините от \(age) · \(state.tag)", "Mobile: in the stores for \(age) · \(state.tag)")
+    }
+
+    private var mobileDetail: String? {
+        guard let state = stats.mobile, let date = state.date else { return errors["mobile"] }
+        var lines = [L("пусната: \(date.formatted(date: .abbreviated, time: .shortened))", "released: \(date.formatted(date: .abbreviated, time: .shortened))")]
+        if let candidate = state.candidate { lines.append(L("следваща: \(candidate)", "next: \(candidate)")) }
+        if let e2e = state.e2e, e2e.lastAt != nil {
+            let when = e2e.lastAt.flatMap { ISO8601DateFormatter().date(from: $0) }.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? ""
+            lines.append(e2e.ok ? L("\ne2e: последният run мина (\(when))", "\ne2e: the last run passed (\(when))")
+                                : L("\ne2e: последният run падна (\(when))", "\ne2e: the last run failed (\(when))"))
+            if let recent = e2e.recent { lines.append(L("\(e2e.passed ?? 0) от последните \(recent) минаха", "\(e2e.passed ?? 0) of the last \(recent) passed")) }
+            if e2e.running > 0 { lines.append(L("\(e2e.running) вървят в момента", "\(e2e.running) running now")) }
+        }
+        lines.append(L("\nклик → версията в GitHub", "\nclick → the release on GitHub"))
         return lines.joined(separator: "\n")
     }
 
@@ -834,10 +921,12 @@ struct Footer: View {
     /// GitHub's list of my open PRs across every repo.
     static let myPRs = "https://github.com/pulls?q=is%3Apr+is%3Aopen+author%3A%40me+archived%3Afalse"
 
-    /// Today's meeting count; turns into an orange "3 · 4 мин" pill before a meeting and a red one during it.
+    /// How many of today's meetings are still ahead (the one you're in counts, finished ones don't); turns
+    /// into an orange "3 · 4 мин" pill before a meeting and a red one during it.
     private func calendar(_ now: Date) -> some View {
-        let count = Text(meetings.access ? "\(meetings.today.count)" : "–")
-        let schedule = meetings.today.map { "\($0.start.formatted(date: .omitted, time: .shortened)) \($0.title)" }.joined(separator: "\n")
+        let remaining = meetings.remaining(at: now)
+        let count = Text(meetings.access ? "\(remaining.count)" : "–")
+        let schedule = remaining.map { "\($0.start.formatted(date: .omitted, time: .shortened)) \($0.title)" }.joined(separator: "\n")
         return Group {
             if let meeting = meetings.current(at: now) {
                 let left = Int(meeting.end.timeIntervalSince(now) / 60)
@@ -872,7 +961,7 @@ struct Footer: View {
                     Image(systemName: "calendar")
                     count
                 }
-                .hoverTip(meetings.access ? L("\(meetings.today.count) срещи днес", "\(meetings.today.count) meetings today") : L("Няма достъп до календара", "No access to the calendar"), schedule)
+                .hoverTip(meetings.access ? L("Още \(remaining.count) срещи днес", "\(remaining.count) more meetings today") : L("Няма достъп до календара", "No access to the calendar"), schedule)
             }
         }
         .padding(.horizontal, 4)

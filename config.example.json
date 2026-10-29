@@ -22,5 +22,12 @@
   "prod": {
     "repo": "your-org/your-repo"
   },
+  "mobile": {
+    "repo": "your-org/your-mobile-app",
+    "tagSuffix": "-production",
+    "promoteWorkflow": "promote.yml",
+    "e2eWorkflow": "e2e.yml",
+    "e2eBranch": "main"
+  },
   "prodComment": "deployed to production"
 }

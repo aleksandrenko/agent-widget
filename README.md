@@ -38,16 +38,20 @@ Unread direct messages and mentions appear under the tasks, one line each, and d
 ### Footer
 - **`e2e`**: green or red by the last run of the e2e workflow you configure (for example the full suite every release build goes through), with a blinking clock while one is running. Hover it for how many of the last 10 passed; click it to open the run.
 - **Browser icon + `2h`**: how long ago the last release of the repo you configure (`prod.repo`, for example the portal) reached production, from its newest `prod-N` release; the same blinking clock while the next one is going out. Hover it for the release and its first changes; click it to open the release notes.
+- **Phone icon + `1d`**: how long the newest mobile version has been in the stores (`mobile.repo`, from its newest `…-production` tag). The phone is green or red by the last run of the mobile e2e workflow; the same blinking clock while a release candidate is being promoted. Hover it for the release date, the candidate waiting after it and the e2e results; click it to open the release.
 - **PRs**: PRs you opened this week / this month.
 - **Tickets**: your open Jira tickets / tickets done this month. Appears once Jira answers (run `setup-jira-token.sh`).
-- **Claude limit**: how much of your Claude 5-hour session limit is used, a small bar that fills up green → orange → red; hover for the %. Filled by a Claude scheduled task (`birdwatcher-usage`, every 15 min on weekdays), because only a Claude session can read the plan limits.
-- **Calendar**: today's meeting count. Ten minutes before a meeting it turns into an orange `3 · 4 мин` pill; during a meeting it turns into a red `3 · в среща` pill. Click it to join the call.
+- **Claude limit**: how much of your Claude 5-hour session limit is used, a small bar that fills up green → orange → red; hover for the %. Filled by a Claude scheduled task (`birdwatcher-usage`, every 15 min on weekdays), because only a Claude session can read the plan limits. Greyed out when the reading is over 3 hours old, so you can tell the task has stopped.
+- **Calendar**: how many of today's meetings are still ahead (the one you're in counts, finished ones don't). Ten minutes before a meeting it turns into an orange `3 · 4 мин` pill; during a meeting it turns into a red `3 · в среща` pill. Click it to join the call.
 - **Week bar**: the panel's bottom edge fills in your accent colour from Monday 09:00 to Friday 18:00. Hover it for the day and the week's progress.
+
+### Explorer
+The **?** between the pin and the ✕ (or **Explorer** in the menu bar menu) starts a tour of the panel: a bubble next to each part says what it is, with **Back** / **Next** to move along and ✕ to stop. Parts the panel isn't showing right now (no Slack, no tasks) are skipped.
 
 ### Pin and the menu bar icon
 Double-click the header to refresh everything now; a faint spinner next to the name turns while it does (and shows, still, while you hover the header). The pin in the header moves the panel above every window, including full-screen apps. Click it again to send the panel back to the desktop.
 
-The ✕ in the header hides the panel; while it's hidden nothing updates, and it refreshes the moment you open it again. The binoculars in the menu bar show its state, clear lenses while the panel is open and covered while it is hidden; they blink while someone wants you (an agent waiting for your answer, or unread Slack). Click them for a menu with **Open / Hide panel**, a short summary (tasks, who's waiting for you, Slack, the next meeting, e2e), **Pin above all windows**, **Language** (Български / English) and **About**. To quit, use Activity Monitor or `pkill TheWatcher`; open it again from Spotlight, Apps or the Desktop icon.
+The ✕ in the header hides the panel; while it's hidden nothing updates, and it refreshes the moment you open it again. The binoculars in the menu bar show its state, clear lenses while the panel is open and covered while it is hidden; they blink while someone wants you (an agent waiting for your answer, or unread Slack). Click them for a menu with **Open / Hide panel**, a short summary (tasks, who's waiting for you, Slack, the next meeting, e2e), **Explorer**, **Pin above all windows**, **Language** (Български / English) and **About**. To quit, use Activity Monitor or `pkill TheWatcher`; open it again from Spotlight, Apps or the Desktop icon.
 
 ---
 
@@ -97,13 +101,13 @@ Everything specific to your company lives outside the app, in `~/.agent-widget/`
 
 | File | What |
 |---|---|
-| `config.json` | Written by setup from your team's link, or a copy of [`config.example.json`](config.example.json). A team link is an https JSON file `{"config": {…config.json…}, "brandSVG": "<svg…>"}`; a gist link works. `team`: your team's name (shown in setup). `brand`: the accent colour. `jira`: your site, project keys, and which statuses count as active. `e2e`: the GitHub repo, workflow (file name or id) and run-title prefix to watch. `prodComment`: the text your release bot comments on a PR once it is in production. |
+| `config.json` | Written by setup from your team's link, or a copy of [`config.example.json`](config.example.json). A team link is an https JSON file `{"config": {…config.json…}, "brandSVG": "<svg…>"}`; a gist link works. `team`: your team's name (shown in setup). `brand`: the accent colour. `jira`: your site, project keys, and which statuses count as active. `e2e`: the GitHub repo, workflow (file name or id) and run-title prefix to watch. `mobile`: the mobile app's repo, the suffix of its store-release tags, its promote workflow and its e2e workflow and branch. `prodComment`: the text your release bot comments on a PR once it is in production. |
 | `brand.svg` | Optional. Your logo mark for the header, drawn in the accent colour. Without it the header shows ✨. |
 
 Leave a section empty and that part of the panel stays empty (no Jira icons, no `e2e`).
 
 ### First run
-- **Calendar**: macOS asks once for calendar access. Your work Google account must be added in *System Settings → Internet Accounts* for meetings to show up.
+- **Calendar**: macOS asks once for calendar access. Your work Google account must be added in *System Settings → Internet Accounts* for meetings to show up. The panel shows what the Mac's Calendar app has; `open -g agentwidget://snapshot` writes every event of today, its calendar and why it is or isn't counted to `~/.agent-widget/meetings.json`.
 - **Jira**: store an API token in the keychain:
   ```bash
   ~/agent-widget/setup-jira-token.sh

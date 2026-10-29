@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private var collecting = false
     private var pinWatch: AnyCancellable?
+    private var tourWatch: AnyCancellable?
     private var statusItem: NSStatusItem?
     private var hiddenWatch: AnyCancellable?
     private let setup = Setup()
@@ -47,7 +48,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         host.sizingOptions = []
         panel = DesktopPanel(content: host)
         panel.setFrameTopLeftPoint(savedTopLeft())
-        pinWatch = store.$pinned.sink { [weak self] in self?.panel.pin($0) }
+        pinWatch = store.$pinned.sink { [weak self] in self?.panel.pin($0 || Tour.shared.current != nil) }
+        // During the tour the panel comes up above the windows, so the bubbles have something to point at.
+        Tour.shared.panel = panel
+        tourWatch = Tour.shared.$current.map { $0 != nil }.removeDuplicates().sink { [weak self] touring in
+            guard let self else { return }
+            panel.pin(store.pinned || touring)
+        }
         panel.orderFrontRegardless()
         if let out = Demo.setupSnapshotPath {  // --setup-snapshot OUT: a picture of the setup window, then quit
             setup.check()  // offscreen, onAppear may not run before the picture
@@ -68,9 +75,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let demo = Demo.directory {
             Snapshot.load(from: demo.appendingPathComponent("tasks.json")).map(show)
             meetings.useDemo(demo.appendingPathComponent("meetings.json"))
+            if let step = Demo.tourStep {  // --tour N: the Explorer at its Nth part
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { Tour.shared.start(at: step) }
+            }
             if let path = Demo.snapshotPath {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                     self?.snapshot(to: URL(fileURLWithPath: path))
+                    if Demo.tourStep != nil {
+                        let url = URL(fileURLWithPath: path)
+                        Tour.shared.snapshot(to: url.deletingLastPathComponent().appendingPathComponent(url.deletingPathExtension().lastPathComponent + "-tour.png"))
+                    }
                     NSApp.terminate(nil)
                 }
             }
@@ -88,7 +102,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated {
                 guard let frame = self?.panel.frame else { return }
                 UserDefaults.standard.set(NSStringFromPoint(NSPoint(x: frame.minX, y: frame.maxY)), forKey: Self.originKey)
+                if Tour.shared.current != nil { Tour.shared.place() }  // the bubble follows the panel
             }
+        }
+        NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: panel, queue: .main) { _ in
+            MainActor.assumeIsolated { if Tour.shared.current != nil { Tour.shared.place() } }  // and its right edge
         }
         meetings.start()
         collect()
@@ -97,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self, !self.store.hidden else { return }  // out of sight: no updates until it's opened again
                 self.ticks += 1
                 self.collect(local: self.ticks % 4 != 0)
-                if self.ticks % 4 == 0 { self.meetings.reload() }
+                if self.ticks % 4 == 0 { self.meetings.reload(sync: true) }
             }
         }
     }
@@ -109,9 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let dir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".agent-widget")
             snapshot(to: dir.appendingPathComponent("panel.png"))
             // What the calendar part sees, to check it against the Calendar app.
-            let seen = meetings.today.map { ["title": $0.title, "start": $0.start.description, "end": $0.end.description,
-                                             "link": $0.url?.absoluteString ?? ""] }
-            try? JSONSerialization.data(withJSONObject: ["access": meetings.access, "today": seen], options: .prettyPrinted)
+            try? JSONSerialization.data(withJSONObject: ["access": meetings.access, "today": meetings.diagnostics()], options: .prettyPrinted)
                 .write(to: dir.appendingPathComponent("meetings.json"))
         }
     }
@@ -145,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hiddenWatch = store.$hidden.sink { [weak self] hidden in
             guard let self else { return }
+            if hidden { Tour.shared.stop() }
             statusItem?.button?.image = Self.menuBarIcon(lids: hidden ? 1 : 0)
             self.updateBlink()
             if hidden {
@@ -247,6 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(info)
         }
         menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: L("Explorer: какво е всяко нещо", "Explorer: what each part is"), action: #selector(startTour), keyEquivalent: ""))
         let pin = NSMenuItem(title: L("Закачи над всички прозорци", "Pin above all windows"), action: #selector(togglePin), keyEquivalent: "")
         pin.state = store.pinned ? .on : .off
         menu.addItem(pin)
@@ -312,13 +330,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrameTopLeftPoint(NSPoint(x: screen.minX + 16, y: screen.maxY - 12))
     }
 
+    /// Opens the panel if it's hidden, then walks over it once it's laid out.
+    @objc private func startTour() {
+        if store.hidden { store.hidden = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { Tour.shared.start() }
+    }
+
     @objc private func togglePin() {
         store.pinned.toggle()
     }
 
     private func refreshNow() {
         collect()
-        meetings.reload()
+        meetings.reload(sync: true)
     }
 
     /// First launch: a link to the app on the Desktop, as the installer used to make.
@@ -448,6 +472,7 @@ enum Demo {
     static let directory = value(of: "--demo").map { URL(fileURLWithPath: $0) }
     static let snapshotPath = value(of: "--snapshot")
     static let setupSnapshotPath = value(of: "--setup-snapshot")
+    static let tourStep = value(of: "--tour").flatMap(Int.init)
     static var isOn: Bool { directory != nil }
 
     private static func value(of flag: String) -> String? {

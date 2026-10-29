@@ -143,6 +143,22 @@
    "open": 7,
    "week": 5,
    "month": 18
+  },
+  "mobile": {
+   "tag": "v26.10.20-production",
+   "at": "2026-10-22T11:00:00Z",
+   "url": "https://github.com/",
+   "running": false,
+   "candidate": "v26.10.24-rc2",
+   "e2e": {
+    "ok": true,
+    "last": "Run mobile E2E Tests",
+    "lastAt": "2026-10-23T08:00:00Z",
+    "url": "https://github.com/",
+    "running": 0,
+    "passed": 7,
+    "recent": 10
+   }
   }
  },
  "errors": {},

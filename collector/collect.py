@@ -21,6 +21,7 @@ DEFAULTS = dict(
     jira=dict(site='', projects=[], activeStatuses=['In Progress', 'In Review']),
     e2e=dict(repo='', workflow='', titlePrefix=''),
     prod=dict(repo=''),
+    mobile=dict(repo='', tagSuffix='-production', promoteWorkflow='', e2eWorkflow='', e2eBranch=''),
     prodComment='deployed to production',
 )
 
@@ -268,11 +269,17 @@ def e2e():
     e2e_cfg = CONFIG['e2e']
     if not (e2e_cfg['repo'] and e2e_cfg['workflow']):
         return None
-    runs = json.loads(sh(['gh', 'run', 'list', '-R', e2e_cfg['repo'], '--workflow', str(e2e_cfg['workflow']), '-L', '60',
-                          '--json', 'status,conclusion,displayTitle,createdAt,url']))
-    full = [r for r in runs if r['displayTitle'].startswith(e2e_cfg['titlePrefix'])]
+    return workflow_runs(e2e_cfg['repo'], e2e_cfg['workflow'], prefix=e2e_cfg['titlePrefix'])
+
+
+def workflow_runs(repo, workflow, prefix='', branch=''):
+    """A workflow's last finished result, how many of the last 10 passed and how many run now; runs whose
+    title starts with `prefix` and, with `branch`, only that branch's."""
+    runs = json.loads(sh(['gh', 'run', 'list', '-R', repo, '--workflow', str(workflow), '-L', '60',
+                          '--json', 'status,conclusion,displayTitle,createdAt,url'] + (['-b', branch] if branch else [])))
+    full = [r for r in runs if r['displayTitle'].startswith(prefix)]
     running = [r for r in full if r['status'] != 'completed']
-    done = [r for r in full if r['status'] == 'completed']
+    done = [r for r in full if r['status'] == 'completed' and r['conclusion'] not in ('cancelled', 'skipped')]
     last = done[0] if done else None
     recent = done[:10]
     return dict(ok=bool(last) and last['conclusion'] == 'success', last=last and last['displayTitle'],
@@ -308,6 +315,36 @@ def prod():
                 prs=shown, total=len(prs))
 
 
+def mobile():
+    """The mobile app's newest store release (the newest `<version><tagSuffix>` tag), the release candidate
+    waiting after it, whether the promote workflow is shipping one now, and its e2e workflow's runs.
+    None when no mobile repo is configured."""
+    cfg = CONFIG['mobile']
+    if not cfg['repo']:
+        return None
+    repo = cfg['repo']
+    number = lambda t: [int(n) for n in re.findall(r'\d+', t)]
+    tags = sorted((r['ref'][len('refs/tags/'):] for r in json.loads(sh(['gh', 'api', '--paginate', f'repos/{repo}/git/matching-refs/tags/v']))),
+                  key=number)
+    shipped = [t for t in tags if t.endswith(cfg['tagSuffix'])]
+    if not shipped:
+        return None
+    tag = shipped[-1]
+    ref = json.loads(sh(['gh', 'api', f'repos/{repo}/git/ref/tags/{tag}']))['object']
+    if ref['type'] == 'tag':  # annotated: the tagger date is when it shipped
+        at = json.loads(sh(['gh', 'api', f'repos/{repo}/git/tags/{ref["sha"]}']))['tagger']['date']
+    else:
+        at = json.loads(sh(['gh', 'api', f'repos/{repo}/commits/{ref["sha"]}']))['commit']['committer']['date']
+    version = number(tag)  # its own candidates (v26.10.24-rc7) share the numbers and sort after it
+    newer = [t for t in tags if not t.endswith(cfg['tagSuffix']) and number(t)[:len(version)] != version and number(t) > version]
+    running = bool(cfg['promoteWorkflow']) and any(  # a run waiting for approval isn't going out yet
+        r['status'] in ('in_progress', 'queued') for r in json.loads(sh(['gh', 'run', 'list', '-R', repo, '--workflow', str(cfg['promoteWorkflow']),
+                                                           '-L', '5', '--json', 'status'])))
+    e2e_state = workflow_runs(repo, cfg['e2eWorkflow'], branch=cfg['e2eBranch']) if cfg['e2eWorkflow'] else None
+    return dict(tag=tag, at=at.replace('+00:00', 'Z'), url=f'https://github.com/{repo}/releases/tag/{tag}', running=running,
+                candidate=newer[-1] if newer else None, e2e=e2e_state)
+
+
 def slack():
     """Unread DMs + mentions from the number on Slack's Dock icon ("•" alone means only channel unreads)."""
     out = subprocess.run(['lsappinfo', 'info', '-only', 'StatusLabel', 'Slack'], capture_output=True, text=True).stdout
@@ -319,14 +356,15 @@ def slack():
 
 
 def usage():
-    """Claude plan limits from the scheduled task's file; None when missing or too old to trust."""
+    """Claude plan limits from the scheduled task's file; None when missing. Older than USAGE_STALE_HOURS it is
+    still passed on, marked `stale`, so the panel can say the task stopped writing it instead of going blank."""
     if not os.path.exists(USAGE):
         return None
     data = json.load(open(USAGE))
     at = dt.datetime.fromisoformat(data['at'].replace('Z', '+00:00')).timestamp()
-    if 'fiveHour' not in data or NOW - at > USAGE_STALE_HOURS * 3600:
+    if 'fiveHour' not in data:
         return None
-    return dict(data, at=at)
+    return dict(data, at=at, stale=NOW - at > USAGE_STALE_HOURS * 3600)
 
 
 def keychain(service):
@@ -483,8 +521,9 @@ def main(local=False):
             errors[name] = str(e).strip()[-200:] or type(e).__name__
             return fallback
 
-    with cf.ThreadPoolExecutor(5) as pool:
-        fs, fp, fc, fe, fd = pool.submit(sessions), pool.submit(prs), pool.submit(pr_counts), pool.submit(e2e), pool.submit(prod)
+    with cf.ThreadPoolExecutor(6) as pool:
+        fs, fp, fc, fe, fd, fm = (pool.submit(sessions), pool.submit(prs), pool.submit(pr_counts), pool.submit(e2e), pool.submit(prod),
+                                  pool.submit(mobile))
         sess = fs.result()
         pulls = safe('github', fp, [])
         counts = safe('prCounts', fc, None)
@@ -493,6 +532,7 @@ def main(local=False):
                                   for p in pulls if p['merged'] is None]
         e2e_state = safe('e2e', fe, None)
         prod_state = safe('prod', fd, None)
+        mobile_state = safe('mobile', fm, None)
     keys = {k for x in sess + pulls for k in x['keys']}
     try:
         issues, closed = jira(keys)
@@ -503,7 +543,7 @@ def main(local=False):
         unread = slack()
     except Exception as e:
         unread, errors['slack'] = [], str(e)[-200:]
-    stats = dict(prs=counts, jira=closed, e2e=e2e_state, prod=prod_state, ai=usage())
+    stats = dict(prs=counts, jira=closed, e2e=e2e_state, prod=prod_state, mobile=mobile_state, ai=usage())
     json.dump(dict(at=NOW, pulls=pulls, issues=issues, slack=unread, stats=stats, errors=errors), open(REMOTE_CACHE, 'w'))
     write(dict(generatedAt=NOW, brand=CONFIG['brand'], tasks=build(sess, pulls, issues, 'jira' in errors), slack=unread,
                stats=stats, errors=errors))

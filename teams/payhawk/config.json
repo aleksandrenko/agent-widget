@@ -27,5 +27,12 @@
   "prodComment": "deployed to production",
   "prod": {
     "repo": "payhawk/portal"
+  },
+  "mobile": {
+    "repo": "payhawk/mobile-react",
+    "tagSuffix": "-production",
+    "promoteWorkflow": 220832985,
+    "e2eWorkflow": 208058840,
+    "e2eBranch": "master"
   }
 }
