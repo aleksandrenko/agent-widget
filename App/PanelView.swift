@@ -1064,19 +1064,20 @@ struct Footer: View {
         return L("\(minutes / 1440)д", "\(minutes / 1440)d")
     }
 
-    /// Open / Done this month, like the PR counter.
+    /// Open / Done this week / Done this month, like the PR counter.
     private var jiraCounter: some View {
         HStack(spacing: 4) {
             Image(systemName: "ticket")
             if let jira = stats.jira {
-                Text("\(jira.open)") + Text("/\(jira.month)").foregroundColor(Palette.ink.opacity(0.45))
+                Text("\(jira.open)") + Text("/\(jira.week)/\(jira.month)").foregroundColor(Palette.ink.opacity(0.45))
             } else {
                 Text("–")
             }
         }
         .hoverTip(L("Твоите Jira тикети", "Your Jira tickets"),
                   stats.jira.map { jira in
-                      ([L("\(jira.open) отворени · \(jira.month) Done този месец", "\(jira.open) open · \(jira.month) done this month"), ""]
+                      ([L("\(jira.open) отворени · \(jira.week) Done тази седмица · \(jira.month) Done този месец",
+                         "\(jira.open) open · \(jira.week) done this week · \(jira.month) done this month"), ""]
                        + Self.list((jira.openList ?? []).map { "• \($0.key) \($0.title) · \($0.status)" }, total: jira.open))
                           .joined(separator: "\n")
                   }
@@ -1088,14 +1089,15 @@ struct Footer: View {
         HStack(spacing: 4) {
             Image(systemName: icon)
             if let counts {
-                Text("\(counts.week)") + Text("/\(counts.month)").foregroundColor(Palette.ink.opacity(0.45))
+                Text("\(counts.open)") + Text("/\(counts.week)/\(counts.month)").foregroundColor(Palette.ink.opacity(0.45))
             } else {
                 Text("–")
             }
         }
         .hoverTip(title, counts.map { counts in
             let open = counts.openList ?? []
-            return ([L("\(counts.week) тази седмица · \(counts.month) този месец", "\(counts.week) this week · \(counts.month) this month"),
+            return ([L("\(counts.open) отворени · \(counts.week) merged тази седмица · \(counts.month) merged този месец",
+                       "\(counts.open) open · \(counts.week) merged this week · \(counts.month) merged this month"),
                      L("\nОтворени (\(open.count)):", "\nOpen (\(open.count)):")]
                     + Self.list(open.map { "• \($0.title) · \($0.repo) #\($0.number)" }, total: open.count)
                     + [L("\nклик → твоите PR-и в GitHub", "\nclick → your PRs on GitHub")])

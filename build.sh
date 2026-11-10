@@ -15,7 +15,7 @@ DEST=/Applications
 [ -w "$DEST" ] || DEST=~/Applications
 RELEASE=false; [ "${1:-}" = "--release" ] && RELEASE=true
 VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true); VERSION=${VERSION:-1.0}
-IDENTITY=$(security find-identity -v -p codesigning | awk '/Apple Development/ { print $2; exit }')
+IDENTITY=$(security find-identity -v -p codesigning | awk '/Apple Development/ && !/REVOKED/ { print $2; exit }')
 $RELEASE && IDENTITY=-  # ad-hoc for others' Macs; Gatekeeper asks once either way
 
 rm -rf "$APP"

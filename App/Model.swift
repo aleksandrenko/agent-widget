@@ -98,7 +98,9 @@ struct Snapshot: Decodable {
         }
     }
 
+    /// My open PRs, and the ones merged this week and this month.
     struct Counts: Decodable {
+        var open: Int
         var week: Int
         var month: Int
         /// My open PRs.

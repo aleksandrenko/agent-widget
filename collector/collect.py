@@ -260,9 +260,9 @@ def week_month():
 
 def pr_counts():
     week, month = week_month()
-    count = lambda since: int(sh(['gh', 'api', '-X', 'GET', 'search/issues', '-f', f'q=is:pr author:@me created:>={since}',
-                                  '-q', '.total_count']))
-    return dict(week=count(week), month=count(month))
+    count = lambda q: int(sh(['gh', 'api', '-X', 'GET', 'search/issues', '-f', f'q=is:pr author:@me {q}', '-q', '.total_count']))
+    merged = lambda since: count(f'is:merged merged:>={since}')
+    return dict(open=count('is:open archived:false'), week=merged(week), month=merged(month))
 
 
 def e2e():
