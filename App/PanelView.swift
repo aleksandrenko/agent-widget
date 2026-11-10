@@ -197,7 +197,7 @@ struct PanelView: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.bottom, 2)
+        .padding(.bottom, WeekLine.height)
         .frame(width: store.width, height: store.height.map { min($0, store.maxHeight) }, alignment: .top)
         .background(alignment: .topTrailing) {
             ZStack(alignment: .topTrailing) {
@@ -561,6 +561,19 @@ struct VisualEffect: NSViewRepresentable {
 struct WeekLine: View {
     static var days: [String] { [L("Понеделник", "Monday"), L("Вторник", "Tuesday"), L("Сряда", "Wednesday"), L("Четвъртък", "Thursday"), L("Петък", "Friday")] }
     static let workday = (start: 9.0, end: 18.0)
+    static let height: CGFloat = 12
+
+    /// The five day names, each centred in its fifth of the bar.
+    private var labels: some View {
+        HStack(spacing: 0) {
+            ForEach(Self.days, id: \.self) { day in
+                Text(day).font(.system(size: 8, weight: .semibold)).tracking(0.2)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -575,9 +588,14 @@ struct WeekLine: View {
                             .offset(x: geo.size.width * Double(day) / 5 - 1)
                     }
                 }
+                // The day names twice: pale over the track, dark over the filled part, cut where the fill ends.
+                labels.foregroundStyle(Color(white: 0.82))
+                GeometryReader { geo in
+                    labels.foregroundStyle(.black.opacity(0.8))
+                        .mask(alignment: .leading) { Rectangle().frame(width: geo.size.width * week.fraction) }
+                }
             }
-            .frame(height: 2)
-            .frame(height: 8, alignment: .bottom)
+            .frame(height: Self.height)
             .hoverTip { x, width in
                 let day = min(4, Int(x / width * 5))
                 let state: String
