@@ -76,9 +76,9 @@ final class Tour: ObservableObject {
             Stop(id: "calendar", title: L("Срещи", "Meetings"),
                  text: L("Колко срещи ти остават днес. Оранжево 10 минути преди среща, червено по време на нея; клик влиза в разговора.",
                          "How many meetings you have left today. Orange 10 minutes before one, red during it; click to join the call.")),
-            Stop(id: "week", title: L("Седмицата", "The week"),
-                 text: L("Пълни се от понеделник 9:00 до петък 18:00. Посочи я за деня.",
-                         "Fills up from Monday 9:00 to Friday 18:00. Hover it for the day.")),
+            Stop(id: "week", title: L("Седмицата и месецът", "The week and the month"),
+                 text: L("Ивицата с дните се пълни от понеделник 9:00 до петък 18:00; посочи я за деня. Синята линия под нея е месецът, с чертичка на всеки понеделник.",
+                         "The bar with the days fills up from Monday 9:00 to Friday 18:00; hover it for the day. The blue line under it is the month, with a tick at each Monday.")),
         ]
     }
 

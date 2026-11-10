@@ -594,8 +594,9 @@ struct WeekLine: View {
                             .offset(x: geo.size.width * Double(day) / 5 - 1)
                     }
                 }
-                // The day names twice: pale over the track, dark over the filled part, cut where the fill ends.
-                labels.foregroundStyle(Color(white: 0.82))
+                // The day names twice: soft over the track (pale on dark glass, slate on light), dark over the
+                // filled part, cut where the fill ends.
+                labels.foregroundStyle(Theme.current.dark ? Color(white: 0.82) : Palette.muted)
                 GeometryReader { geo in
                     labels.foregroundStyle(.black.opacity(0.8))
                         .mask(alignment: .leading) { Rectangle().frame(width: geo.size.width * week.fraction) }
@@ -630,7 +631,8 @@ struct WeekLine: View {
 
 // MARK: - Month line
 
-/// A thin line under the week bar: how far the month has gone, by calendar days, with a tick at each Monday.
+/// A thin line under the week bar, drawn like the old week bar: how far the month has gone, by calendar days,
+/// with a dark tick at each Monday.
 struct MonthLine: View {
     static let height: CGFloat = 2
     /// The 1px line of panel between the week bar and this one.
@@ -640,12 +642,12 @@ struct MonthLine: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let month = Self.progress(context.date)
             ZStack(alignment: .leading) {
-                Color.black.opacity(0.7)
+                Palette.track
                 GeometryReader { geo in Palette.hex(0x3B82F6).frame(width: geo.size.width * month.fraction) }
                 GeometryReader { geo in
                     ForEach(month.mondays, id: \.self) { at in
-                        Rectangle().fill(Color(white: 0.6)).frame(width: 1)
-                            .offset(x: geo.size.width * at)
+                        Rectangle().fill(.black.opacity(0.5)).frame(width: 2)
+                            .offset(x: geo.size.width * at - 1)
                     }
                 }
             }
