@@ -15,7 +15,15 @@ DEST=/Applications
 [ -w "$DEST" ] || DEST=~/Applications
 RELEASE=false; [ "${1:-}" = "--release" ] && RELEASE=true
 VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true); VERSION=${VERSION:-1.0}
-IDENTITY=$(security find-identity -v -p codesigning | awk '/Apple Development/ && !/REVOKED/ { print $2; exit }')
+# The newest non-revoked Apple Development certificate: older ones get revoked, and macOS trashes an app
+# signed with a revoked one at launch (the keychain doesn't always know yet, and the list order varies).
+IDENTITY=; NEWEST=0
+for hash in $(security find-identity -v -p codesigning | awk '/Apple Development/ && !/REVOKED/ { print $2 }'); do
+    ends=$(security find-certificate -a -c "Apple Development" -Z -p | awk -v h="$hash" '/SHA-1 hash/ { on = ($3 == h) } on' \
+           | openssl x509 -noout -enddate | cut -d= -f2)
+    at=$(date -j -f "%b %d %T %Y %Z" "$ends" +%s 2>/dev/null || echo 0)
+    if (( at > NEWEST )); then NEWEST=$at; IDENTITY=$hash; fi
+done
 $RELEASE && IDENTITY=-  # ad-hoc for others' Macs; Gatekeeper asks once either way
 
 rm -rf "$APP"

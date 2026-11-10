@@ -197,7 +197,7 @@ struct PanelView: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.bottom, WeekLine.height)
+        .padding(.bottom, WeekLine.height + MonthLine.gap + MonthLine.height)
         .frame(width: store.width, height: store.height.map { min($0, store.maxHeight) }, alignment: .top)
         .background(alignment: .topTrailing) {
             ZStack(alignment: .topTrailing) {
@@ -205,7 +205,13 @@ struct PanelView: View {
                 EdgeGlow()
             }
         }
-        .overlay(alignment: .bottom) { WeekLine().tourStop("week", inset: 0) }
+        .overlay(alignment: .bottom) {
+            VStack(spacing: MonthLine.gap) {
+                WeekLine()
+                MonthLine()
+            }
+            .tourStop("week", inset: 0)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.ink.opacity(0.18), lineWidth: 0.5))
         .overlay {
@@ -619,6 +625,47 @@ struct WeekLine: View {
         let today = min(1, max(0, (hour - workday.start) / (workday.end - workday.start)))
         let fraction = weekday > 4 ? 1 : (Double(weekday) + today) / 5
         return (fraction, today, weekday)
+    }
+}
+
+// MARK: - Month line
+
+/// A thin line under the week bar: how far the month has gone, by calendar days, with a tick at each Monday.
+struct MonthLine: View {
+    static let height: CGFloat = 2
+    /// The 1px line of panel between the week bar and this one.
+    static let gap: CGFloat = 1
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let month = Self.progress(context.date)
+            ZStack(alignment: .leading) {
+                Color.black.opacity(0.7)
+                GeometryReader { geo in Palette.hex(0x3B82F6).frame(width: geo.size.width * month.fraction) }
+                GeometryReader { geo in
+                    ForEach(month.mondays, id: \.self) { at in
+                        Rectangle().fill(Color(white: 0.6)).frame(width: 1)
+                            .offset(x: geo.size.width * at)
+                    }
+                }
+            }
+            .frame(height: Self.height)
+            .hoverTip(L("Месецът", "The month"), L("\(Int(month.fraction * 100))% от месеца", "\(Int(month.fraction * 100))% of the month"))
+        }
+    }
+
+    /// The part of the month gone, and where each Monday after the 1st starts, both as 0...1.
+    static func progress(_ date: Date) -> (fraction: Double, mondays: [Double]) {
+        let calendar = Calendar.current
+        guard let month = calendar.dateInterval(of: .month, for: date) else { return (0, []) }
+        let fraction = date.timeIntervalSince(month.start) / month.duration
+        let days = calendar.range(of: .day, in: .month, for: date)?.count ?? 30
+        let mondays = (1..<days).compactMap { offset -> Double? in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: month.start),
+                  calendar.component(.weekday, from: day) == 2 else { return nil }
+            return day.timeIntervalSince(month.start) / month.duration
+        }
+        return (fraction, mondays)
     }
 }
 
