@@ -29,5 +29,9 @@
     "e2eWorkflow": "e2e.yml",
     "e2eBranch": "main"
   },
-  "prodComment": "deployed to production"
+  "prodComment": "deployed to production",
+  "score": {
+    "target": 230,
+    "org": "your-org"
+  }
 }

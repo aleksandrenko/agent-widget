@@ -7,6 +7,7 @@ Writes ~/.agent-widget/tasks.json and prints `changed` or `same`.
 
     python3 collect.py           # everything
     python3 collect.py --local   # sessions and Slack only, last GitHub/Jira answers reused
+    python3 collect.py --score   # the month's score into ~/.agent-widget/score.json (started in the background)
 """
 import base64, concurrent.futures as cf, datetime as dt, glob, json, os, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 
@@ -23,6 +24,7 @@ DEFAULTS = dict(
     prod=dict(repo=''),
     mobile=dict(repo='', tagSuffix='-production', promoteWorkflow='', e2eWorkflow='', e2eBranch=''),
     prodComment='deployed to production',
+    score=dict(target=230, org=''),
 )
 
 
@@ -371,6 +373,209 @@ def usage():
     return dict(data, at=at, stale=NOW - at > USAGE_STALE_HOURS * 3600)
 
 
+# The month's engineering KPI, the Normalized Score (REV-12239):
+#   work points = 0.5 × item points + counted lines ÷ 450 + 0.5 × merged PRs, score = 10 × √(work points).
+# GitHub takes a minute or more for a busy month (every PR with its files), so `collect.py --score` runs in the
+# background every SCORE_EVERY_MINUTES and writes SCORE_FILE; the regular runs only read it.
+SCORE_FILE = os.path.join(OUT_DIR, 'score.json')
+SCORE_LOCK = os.path.join(OUT_DIR, 'score.lock')  # when the last background run started
+SCORE_EVERY_MINUTES = 30
+SCORE_QUERY = '''query($q: String!, $after: String) { search(query: $q, type: ISSUE, first: 50, after: $after) {
+  pageInfo { hasNextPage endCursor }
+  nodes { ... on PullRequest { title url mergedAt headRefName additions deletions repository { name }
+    files(first: 100) { nodes { path additions deletions } } } } } }'''
+SCORE_KEY = re.compile(r'(?<![A-Za-z0-9])[A-Za-z][A-Za-z0-9]+-[0-9]+')
+TEST_DIRS = {'__tests__', '__mocks__', '__snapshots__', 'test', 'tests', 'spec', 'specs', 'e2e', 'testdata', 'test-utils',
+             'testutils', 'fixture', 'fixtures'}
+TEST_DATA_DIRS = {'__snapshots__', '__mocks__', 'mocks', 'stubs', 'fixtures', 'fixture', 'testdata'}
+TEST_DATA_EXTS = {'json', 'yaml', 'yml', 'csv', 'xml', 'html', 'txt', 'sql', 'eml'}
+TEST_NAME = re.compile(r'\.(spec|test|e2e|e2e-spec)\.[^.]+$|^test_.*\.py$|_test\.(py|go)$|Tests?\.(java|kt|scala|groovy|cs)$|\.snap$')
+LOCKFILE = re.compile(r'(^|/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|poetry\.lock|Pipfile\.lock|uv\.lock|'
+                      r'Gemfile\.lock|composer\.lock|Cargo\.lock|go\.sum|packages\.lock\.json)$')
+
+
+def excluded(repo, path):
+    """A file the score leaves out: lockfiles, test data inside test paths, docs folders outside test paths."""
+    *folders, name = path.split('/')
+    low = [f.lower() for f in folders]
+    ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+    test_path = (any(f in TEST_DIRS for f in low) or any(re.fullmatch(r'[a-z0-9_.]+-tests?', f, re.I) for f in folders)
+                 or TEST_NAME.search(name) or re.search(r'(^|[-_.])(e2e|tests?)($|[-_.])', repo, re.I))
+    test_file = repo != 'e2e-tests' and bool(test_path)
+    return bool(LOCKFILE.search(path)
+                or (test_file and (any(f in TEST_DATA_DIRS for f in low) or name.endswith('.snap') or ext in TEST_DATA_EXTS))
+                or (not test_file and any(f in ('doc', 'docs', 'openspec') for f in low)))
+
+
+def item_points(lines):
+    """The PR's size band: XXS 0.5, XS 1, S 2, M 3, L 5, XL 8."""
+    return next((points for limit, points in ((15, 0.5), (30, 1), (150, 2), (600, 3), (2000, 5)) if lines < limit), 8)
+
+
+def score_pr(n, done):
+    """One PR for the score. Its item is the first Jira key in its title or branch, a key Jira confirmed as done
+    first (words such as utf-8 look like keys). `done` is None when Jira did not answer: every named item counts."""
+    repo = n['repository']['name']
+    files = [f for f in ((n.get('files') or {}).get('nodes') or []) if f]
+    lines = max(n['additions'] + n['deletions'] - sum(f['additions'] + f['deletions'] for f in files if excluded(repo, f['path'])), 0)
+    keys = [k.upper() for k in SCORE_KEY.findall(f"{n['title']} {n['headRefName']}")]
+    key = next((k for k in keys if done and k in done), keys[0] if keys else None)
+    return dict(repo=repo, url=n['url'], lines=lines, points=item_points(lines), merged=n.get('mergedAt') or 'open',
+                norm=' '.join(n['title'].lower().split()), key=key, item=key is not None and (done is None or key in done))
+
+
+def counted(prs):
+    """The PRs that count for lines and the PR count: no automatic titles, and one PR for a title merged in 3+ repos."""
+    groups = {}
+    for p in prs:
+        if not re.match(r'(auto update triggered|chore\(dependencies\):)', p['norm']):
+            groups.setdefault(p['norm'], []).append(p)
+    return [p for g in groups.values() for p in ([min(g, key=lambda p: (p['merged'], p['url']))] if len({p['repo'] for p in g}) >= 3 else g)]
+
+
+def bonuses(prs):
+    """A done item whose PRs span several repos gets one item point per extra repo, at most 5."""
+    repos = {}
+    for p in prs:
+        if p['item']:
+            repos.setdefault(p['key'], set()).add(p['repo'])
+    return [min(5, len(r) - 1) for r in repos.values() if len(r) > 1]
+
+
+def work_points(prs):
+    c = counted(prs)
+    return (0.5 * (sum(p['points'] for p in prs if p['item']) + sum(bonuses(prs)))
+            + sum(min(p['lines'], 2000) for p in c) / 450 + 0.5 * len(c))
+
+
+def search_all(q):
+    """Every PR of a GitHub search, 50 a page; each page is retried on its own (heavy pages get an occasional 502)."""
+    nodes, after = [], None
+    while True:
+        args = ['gh', 'api', 'graphql', '-f', 'query=' + SCORE_QUERY, '-f', 'q=' + q] + (['-f', 'after=' + after] if after else [])
+        for attempt in range(3):
+            try:
+                page = json.loads(sh(args, timeout=60))['data']['search']
+                break
+            except (RuntimeError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+                if attempt == 2:
+                    raise
+                time.sleep(2)
+        nodes += [n for n in page['nodes'] if n]
+        if not page['pageInfo']['hasNextPage']:
+            return nodes
+        after = page['pageInfo']['endCursor']
+
+
+def done_keys(keys):
+    """The keys among `keys` that are my items in Done, QA or Resolved; None when Jira did not answer."""
+    if not keys:
+        return set()
+    email, token = keychain('jira_email'), keychain('jira_api_token')
+    if not (JIRA and email and token):
+        return None
+    headers = {'Authorization': 'Basic ' + base64.b64encode(f'{email}:{token}'.encode()).decode(),
+               'Accept': 'application/json', 'Content-Type': 'application/json'}
+    post = lambda path, body: json.load(urllib.request.urlopen(urllib.request.Request(
+        JIRA + path, data=json.dumps(body).encode(), method='POST', headers=headers), timeout=30))
+    keys = sorted(keys)
+    try:
+        for _ in range(4):  # Jira refuses the whole search for a key that does not exist: drop the ones it names
+            try:
+                found, page = set(), None
+                while True:
+                    data = post('/rest/api/3/search/jql', dict(
+                        jql=f'key in ({",".join(keys)}) AND assignee = currentUser() AND status IN (Done, QA, Resolved)',
+                        fields=['status'], maxResults=100, **({'nextPageToken': page} if page else {})))
+                    found |= {i['key'] for i in data.get('issues', [])}
+                    page = data.get('nextPageToken')
+                    if not page:
+                        break
+                break
+            except urllib.error.HTTPError as e:
+                bad = set(re.findall(r"'([A-Za-z][A-Za-z0-9]+-\d+)'", e.read().decode(errors='replace'))) if e.code == 400 else set()
+                keys = [k for k in keys if k not in bad]
+                if not bad or not keys:
+                    return None if bad == set() else set()
+        else:
+            return None
+        if not found:  # a wrong token is answered as an anonymous user: no issues, no error
+            urllib.request.urlopen(urllib.request.Request(JIRA + '/rest/api/3/myself', headers=headers), timeout=20)
+        return found
+    except Exception:
+        return None
+
+
+def score_month():
+    """Fetches the month and writes SCORE_FILE; a failure keeps the last numbers and adds the error."""
+    cfg = CONFIG['score']
+    org = f" org:{cfg['org']}" if cfg['org'] else ''
+    today = dt.datetime.now(dt.timezone.utc).date()  # the dashboard buckets a PR by the UTC month of its merge
+    start = today.replace(day=1)
+    last_end = start - dt.timedelta(days=1)
+    last_start = last_end.replace(day=1)
+    try:
+        merged_nodes = search_all(f'is:pr is:merged author:@me{org} merged:>={start}')
+        open_nodes = search_all(f'is:pr is:open archived:false author:@me{org}')
+        # Last month's PRs do not change: fetched once and kept. Their items can still reach Done, so Jira is asked again.
+        last_file = os.path.join(OUT_DIR, f'score-last-{last_start:%Y-%m}.json')
+        try:
+            last_nodes = json.load(open(last_file))
+        except (OSError, ValueError):
+            try:
+                last_nodes = search_all(f'is:pr is:merged author:@me{org} merged:{last_start}..{last_end}')
+                json.dump(last_nodes, open(last_file, 'w'))
+                for old in glob.glob(os.path.join(OUT_DIR, 'score-last-*.json')):
+                    if old != last_file:
+                        os.remove(old)
+            except Exception:
+                last_nodes = None
+        done = done_keys({k.upper() for n in merged_nodes + open_nodes + (last_nodes or [])
+                          for k in SCORE_KEY.findall(f"{n['title']} {n['headRefName']}")})
+        merged = [score_pr(n, done) for n in merged_nodes]
+        as_done = lambda prs: [dict(p, item=p['key'] is not None) for p in prs]
+        opened = as_done([score_pr(n, done) for n in open_nodes])
+        work = work_points(merged)
+        weekdays = [d for d in (start + dt.timedelta(days=i) for i in range(31)) if d.month == start.month and d.weekday() < 5]
+        days, elapsed = len(weekdays), len([d for d in weekdays if d <= today])
+        c = counted(merged)
+        bonus = 0.5 * sum(bonuses(merged))
+        lost = sorted([
+            dict(id='jira', count=len([p for p in merged if p['key'] and not p['item']]), points=work_points(as_done(merged)) - work),
+            dict(id='cap', count=len([p for p in c if p['lines'] > 2000]), points=sum((p['lines'] - 2000) / 450 for p in c if p['lines'] > 2000)),
+            dict(id='nokey', count=len([p for p in merged if not p['key']]), points=0.5 * sum(p['points'] for p in merged if not p['key'])),
+        ], key=lambda x: -x['points'])
+        last_work = work_points([score_pr(n, done) for n in last_nodes]) if last_nodes is not None else None
+        out = dict(at=time.time(), month=f'{start:%Y-%m}', target=cfg['target'], score=10 * work ** 0.5, work=work,
+                   forecast=10 * (work * days / elapsed) ** 0.5 if elapsed else 10 * work ** 0.5, days=days, elapsed=elapsed,
+                   merged=dict(count=len(merged), points=work - bonus), bonus=dict(count=len(bonuses(merged)), points=bonus),
+                   lost=lost, open=dict(count=len(opened), points=work_points(merged + opened) - work), jira=done is not None,
+                   last=None if last_work is None else dict(month=f'{last_start:%Y-%m}', score=10 * last_work ** 0.5, work=last_work))
+    except Exception as e:
+        out = json.load(open(SCORE_FILE)) if os.path.exists(SCORE_FILE) else None
+        if out is None:
+            raise
+        out['error'] = str(e).strip()[-200:] or type(e).__name__
+    tmp = SCORE_FILE + '.tmp'
+    json.dump(out, open(tmp, 'w'))
+    os.replace(tmp, SCORE_FILE)
+
+
+def score():
+    """The month's score from SCORE_FILE, and a background run when it is older than SCORE_EVERY_MINUTES (at most one
+    every 10 minutes, so a failing one does not run every minute). None until the month's first run is done."""
+    if 'score' in OFF:
+        return None
+    data = json.load(open(SCORE_FILE)) if os.path.exists(SCORE_FILE) else None
+    month = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m')
+    fresh = data and data.get('month') == month and not data.get('error') and NOW - data['at'] < SCORE_EVERY_MINUTES * 60
+    if not fresh and not (os.path.exists(SCORE_LOCK) and NOW - os.path.getmtime(SCORE_LOCK) < 600):
+        open(SCORE_LOCK, 'w').close()
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), '--score'], start_new_session=True, env=os.environ,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=open(os.path.join(OUT_DIR, 'collect.log'), 'a'))
+    return data if data and data.get('month') == month else None
+
+
 def keychain(service):
     try:
         return sh(['security', 'find-generic-password', '-a', os.environ.get('USER', ''), '-s', service, '-w']).strip()
@@ -517,7 +722,7 @@ def main(local=False):
         except Exception:
             unread = remote['slack']
         write(dict(generatedAt=NOW, brand=CONFIG['brand'], tasks=build(sess, remote['pulls'], remote['issues'], 'jira' in remote['errors']),
-                   slack=unread, stats=dict(remote['stats'], ai=usage()), errors=remote['errors']))
+                   slack=unread, stats=dict(remote['stats'], ai=usage(), score=score()), errors=remote['errors']))
         return
     errors = {}
 
@@ -551,7 +756,13 @@ def main(local=False):
         unread = slack()
     except Exception as e:
         unread, errors['slack'] = [], str(e)[-200:]
-    stats = dict(prs=counts, jira=closed, e2e=e2e_state, prod=prod_state, mobile=mobile_state, ai=usage())
+    try:
+        month_score = score()
+    except Exception as e:
+        month_score, errors['score'] = None, str(e)[-200:]
+    if month_score and month_score.get('error'):
+        errors['score'] = month_score['error']
+    stats = dict(prs=counts, jira=closed, e2e=e2e_state, prod=prod_state, mobile=mobile_state, ai=usage(), score=month_score)
     json.dump(dict(at=NOW, pulls=pulls, issues=issues, slack=unread, stats=stats, errors=errors), open(REMOTE_CACHE, 'w'))
     write(dict(generatedAt=NOW, brand=CONFIG['brand'], tasks=build(sess, pulls, issues, 'jira' in errors), slack=unread,
                stats=stats, errors=errors))
@@ -567,4 +778,7 @@ def write(out):
 
 
 if __name__ == '__main__':
-    main(local='--local' in sys.argv)
+    if '--score' in sys.argv:
+        score_month()
+    else:
+        main(local='--local' in sys.argv)

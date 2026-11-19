@@ -54,6 +54,11 @@ final class Store: ObservableObject {
         didSet { UserDefaults.standard.set(hidden, forKey: Self.hiddenKey) }
     }
     static let hiddenKey = "panelHidden"
+    /// Minimized with the header's — button: only the header, the footer and the week and month bars stay.
+    @Published var minimized = !Demo.isOn && UserDefaults.standard.bool(forKey: minimizedKey) {
+        didSet { UserDefaults.standard.set(minimized, forKey: Self.minimizedKey) }
+    }
+    static let minimizedKey = "panelMinimized"
 }
 
 // MARK: - Palette
@@ -72,6 +77,8 @@ struct Theme {
     var opacity: (outer: Double, tasks: Double) = (0.8, 0.9)
     /// The still glow from the top-left corner.
     var glow: [(color: UInt32, opacity: Double, center: UnitPoint, radius: CGFloat)] = []
+    /// The theme's accent wins over the team's brand.accent.
+    var ownAccent = false
 
     static let payhawkGlow: [(color: UInt32, opacity: Double, center: UnitPoint, radius: CGFloat)] = [
         (0x3B82F6, 0.75, .topLeading, 0.65),
@@ -87,7 +94,11 @@ struct Theme {
     /// Plain, like the system's own widgets: flat grey, almost opaque, no glow.
     static let native = Theme(id: "native", name: "Native", accent: 0x30D158, dark: true,
                               tint: 0x2C2C2E, tasksTint: 0x3A3A3C, opacity: (0.97, 1))
-    static let all = [payhawkDarkGreen, payhawkDay, native]
+    /// Like a SwiftBar menu: the light, frosted macOS menu, flat (the task layer barely shows), no glow, and the
+    /// menu's blue accent over the team's brand colour.
+    static let swiftBar = Theme(id: "swiftbar", name: "SwiftBar", accent: 0x3D7BD9, dark: false,
+                                tint: 0xF5F5F5, tasksTint: 0xFFFFFF, opacity: (0.72, 0.5), ownAccent: true)
+    static let all = [payhawkDarkGreen, payhawkDay, native, swiftBar]
     static let key = "theme"
 
     static var current: Theme {
@@ -124,7 +135,7 @@ enum Palette {
 
     /// The team's brand accent (config.json → brand.accent), else the theme's: header mark, pinned pin, week bar.
     static var brandAccent: Color?
-    static var accent: Color { brandAccent ?? hex(Theme.current.accent) }
+    static var accent: Color { Theme.current.ownAccent ? hex(Theme.current.accent) : brandAccent ?? hex(Theme.current.accent) }
 
     static func hex(_ string: String?) -> Color? {
         guard let string, let value = UInt32(string.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) else { return nil }
@@ -171,11 +182,16 @@ struct PanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Header(brand: store.snapshot?.brand, count: store.snapshot?.tasks.count, pinned: $store.pinned, refreshing: store.refreshing,
+            Header(brand: store.snapshot?.brand, count: store.snapshot?.tasks.count,
+                   score: store.isOn(.score) ? store.snapshot?.stats.score : nil,
+                   pinned: $store.pinned, minimized: $store.minimized, refreshing: store.refreshing,
                    close: { store.hidden = true }, refresh: refresh, help: { Tour.shared.current == nil ? Tour.shared.start() : Tour.shared.stop() })
             if let snapshot = store.snapshot {
-                // With a height of its own the items scroll and the footer stays put; else the panel fits them.
-                if let height = store.height.map({ min($0, store.maxHeight) }) {
+                // Minimized: no tasks or Slack, just the footer. With a height of its own the items scroll and the
+                // footer stays put; else the panel fits them.
+                if store.minimized {
+                    EmptyView()
+                } else if let height = store.height.map({ min($0, store.maxHeight) }) {
                     ScrollView { items(snapshot) }
                         .scrollIndicators(.automatic)
                         .onScrollGeometryChange(for: CGPoint.self, of: { geo in
@@ -198,7 +214,7 @@ struct PanelView: View {
         }
         .padding(.horizontal, 8)
         .padding(.bottom, WeekLine.height + MonthLine.gap + MonthLine.height)
-        .frame(width: store.width, height: store.height.map { min($0, store.maxHeight) }, alignment: .top)
+        .frame(width: store.width, height: store.minimized ? nil : store.height.map { min($0, store.maxHeight) }, alignment: .top)
         .background(alignment: .topTrailing) {
             ZStack(alignment: .topTrailing) {
                 Glass()
@@ -270,20 +286,24 @@ struct PanelView: View {
     }
 }
 
-/// Top strip: the brand mark and name on the left, the Mac user's full name, the pin, the Explorer ? and
+/// Top strip: the brand mark and name on the left; the month's score dots, the pin, the Explorer ?, minimize and
 /// the ✕ on the right.
 /// The mark is ~/.agent-widget/brand.svg when there is one.
 struct Header: View {
     var brand: Snapshot.Brand?
     /// How many tasks the panel shows, next to the name.
     var count: Int?
+    /// The month's score, when the module is on and the first run is done.
+    var score: Snapshot.Score?
     @Binding var pinned: Bool
+    @Binding var minimized: Bool
     var refreshing = false
     var close: () -> Void
     var refresh: () -> Void
     var help: () -> Void = {}
     @State private var pinHovered = false
     @State private var helpHovered = false
+    @State private var minimizeHovered = false
     @State private var closeHovered = false
     @State private var headerHovered = false
 
@@ -317,9 +337,6 @@ struct Header: View {
             .opacity(refreshing || headerHovered ? 1 : 0)
             .padding(.leading, 5)
             Spacer(minLength: 8)
-            (Text(Image(systemName: "person.fill")).font(.system(size: 10)).baselineOffset(1.5) + Text(" " + (Demo.isOn ? "Jamie Rivera" : NSFullUserName())).font(.system(size: 12)))
-                .foregroundStyle(Palette.ink.opacity(0.7))
-                .lineLimit(1)
           }
           .contentShape(Rectangle())
           .tourStop("header")
@@ -330,6 +347,9 @@ struct Header: View {
               Tooltip.shared.show(title: L("Обновявам…", "Refreshing…"))
               DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { Tooltip.shared.hide() }
           }
+            if let score {
+                ScoreDots(score: score).tourStop("score", inset: 0)
+            }
             Image(systemName: pinned ? "pin.fill" : "pin")
                 .font(.system(size: 10, weight: .semibold))
                 .rotationEffect(.degrees(45))
@@ -371,6 +391,27 @@ struct Header: View {
                     help()
                 }
                 .tourStop("help", inset: 0)
+            Image(systemName: minimized ? "plus" : "minus")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Palette.ink.opacity(0.7))
+                .frame(width: 18, height: 22)
+                .background(Circle().fill(Palette.ink.opacity(minimizeHovered ? 0.08 : 0)))
+                .contentShape(Circle())
+                .onHover { inside in
+                    minimizeHovered = inside
+                    if inside {
+                        Tooltip.shared.show(title: minimized ? L("Покажи задачите", "Show the tasks") : L("Минимизирай", "Minimize"),
+                                            detail: minimized ? L("клик → агентите, PR-ите и Slack се връщат", "click → agents, PRs and Slack come back")
+                                                              : L("клик → остават само хедърът, футърът и седмицата", "click → only the header, the footer and the week stay"))
+                    } else {
+                        Tooltip.shared.hide()
+                    }
+                }
+                .onTapGesture {
+                    Tooltip.shared.hide()
+                    minimized.toggle()
+                }
+                .tourStop("minimize", inset: 0)
             Image(systemName: "xmark")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(Palette.ink.opacity(0.7))
@@ -586,6 +627,13 @@ struct WeekLine: View {
             let week = Self.progress(context.date)
             ZStack(alignment: .leading) {
                 Palette.track
+                // Today, once the workday has begun: grey-green behind it, so what's left of the day stands apart from
+                // the days to come; soft enough that the day name and the fill still read on it.
+                if week.weekday <= 4, week.today > 0 {
+                    GeometryReader { geo in
+                        Palette.accent.opacity(0.28).frame(width: geo.size.width / 5).offset(x: geo.size.width * Double(week.weekday) / 5)
+                    }
+                }
                 GeometryReader { geo in Palette.accent.frame(width: geo.size.width * week.fraction) }
                 // Faint dark ticks between the five days, to see how far today's slice has got.
                 GeometryReader { geo in

@@ -165,6 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.action = #selector(statusItemClicked)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         item.button?.toolTip = "TheWatcher"
+        item.button?.imagePosition = .imageLeading  // the number of things waiting for you sits after the binoculars
         statusItem = item
         snapshotWatch = store.$snapshot.sink { [weak self] _ in
             DispatchQueue.main.async { self?.updateBlink() }
@@ -234,8 +235,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return snapshot.tasks.contains { $0.agent == "waiting" } || (store.isOn(.slack) && snapshot.slack?.contains { $0.count > 0 } == true)
     }
 
-    /// While someone wants you, the eye in the menu bar blinks every few seconds.
+    /// How many want you: agents waiting for your answer plus unread Slack DMs and mentions.
+    private var attentionCount: Int {
+        guard let snapshot = store.snapshot else { return 0 }
+        let agents = snapshot.tasks.filter { $0.agent == "waiting" }.count
+        let slack = store.isOn(.slack) ? snapshot.slack?.reduce(0, { $0 + $1.count }) ?? 0 : 0
+        return agents + slack
+    }
+
+    /// While someone wants you, the eye in the menu bar blinks every few seconds and shows how many want you.
     private func updateBlink() {
+        let count = attentionCount
+        statusItem?.button?.attributedTitle = NSAttributedString(
+            string: count > 0 ? "\(count)" : "",
+            attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)])
         guard wantsAttention else {
             blinkTimer?.invalidate()
             blinkTimer = nil

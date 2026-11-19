@@ -22,7 +22,7 @@ func L(_ bg: String, _ en: String) -> String {
 /// its name, a `store.isOn(.x)` check where the panel draws it, and the same name in the collector's `OFF`
 /// check if it fetches something.
 enum Module: String, CaseIterable {
-    case e2e, portal, mobile, prs, jira, limit, calendar, slack
+    case e2e, portal, mobile, prs, jira, limit, calendar, slack, score
     static let offKey = "modulesOff"
 
     var name: String {
@@ -35,6 +35,7 @@ enum Module: String, CaseIterable {
         case .limit: L("Текущ лимит на Claude", "Claude current limits")
         case .calendar: L("Срещите ми в календара", "My calendar meetings")
         case .slack: L("Известия за Slack съобщения", "Slack message alerts")
+        case .score: L("Моите точки за месеца", "My monthly score")
         }
     }
 }
@@ -61,6 +62,51 @@ struct Snapshot: Decodable {
         var prod: Prod?
         var mobile: Mobile?
         var ai: Usage?
+        var score: Score?
+    }
+
+    /// My engineering KPI for the month (the Normalized Score): score = 10 × √work points, against `target`.
+    /// Written by the collector's background `--score` run every 30 minutes.
+    struct Score: Decodable {
+        var at: Double
+        var target: Double
+        var score: Double
+        var work: Double
+        /// The score at the month end if the pace so far keeps up.
+        var forecast: Double
+        /// Monday to Friday in the month, and how many of them have started.
+        var days: Double
+        var elapsed: Double
+        var merged: Row
+        var bonus: Row
+        /// Merged work the score leaves out today: `jira` item not done, `cap` lines over 2,000, `nokey` no Jira key.
+        var lost: [Lost]
+        var open: Row
+        /// false: Jira did not answer, so every named item counts.
+        var jira: Bool
+        var last: Last?
+        /// The last background run failed; the numbers are from the run before.
+        var error: String?
+
+        struct Row: Decodable {
+            var count: Int
+            var points: Double
+        }
+
+        struct Lost: Decodable {
+            var id: String
+            var count: Int
+            var points: Double
+        }
+
+        struct Last: Decodable {
+            var month: String
+            var score: Double
+            var work: Double
+        }
+
+        /// The work points the target needs: (target ÷ 10)².
+        var goal: Double { (target / 10) * (target / 10) }
     }
 
     /// Claude plan limits, from the birdwatcher-usage scheduled task (every 15 min on weekdays).

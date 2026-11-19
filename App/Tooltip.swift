@@ -22,24 +22,30 @@ final class Tooltip {
     }
 
     func show(title: String, detail: String? = nil) {
-        host.rootView = AnyView(
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 11, weight: .semibold))
-                if let detail, !detail.isEmpty {
-                    Text(detail).font(.system(size: 11))
-                }
+        show(content: VStack(alignment: .leading, spacing: 1) {
+            Text(title).font(.system(size: 11, weight: .semibold))
+            if let detail, !detail.isEmpty {
+                Text(detail).font(.system(size: 11))
             }
-            .foregroundStyle(Color(white: 0.94))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(Color(white: 0.17), in: RoundedRectangle(cornerRadius: 6))
-            .fixedSize()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5))
+    }
+
+    /// Any view on the tooltip's dark card, under the cursor.
+    func show<Content: View>(content: Content) {
+        host.rootView = AnyView(
+            content
+                .foregroundStyle(Color(white: 0.94))
+                .background(Color(white: 0.17), in: RoundedRectangle(cornerRadius: 6))
+                .fixedSize()
         )
         let size = host.fittingSize
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) }?.visibleFrame ?? .zero
         var origin = NSPoint(x: mouse.x - 10, y: mouse.y - 22 - size.height)
-        origin.x = min(origin.x, screen.maxX - size.width - 4)
+        origin.x = max(screen.minX + 4, min(origin.x, screen.maxX - size.width - 4))
+        origin.y = max(origin.y, screen.minY + 4)
         window.setFrame(NSRect(origin: origin, size: size), display: true)
         window.orderFrontRegardless()
     }

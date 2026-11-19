@@ -56,6 +56,17 @@ Only a Claude session can read the plan limits, so a Claude scheduled task (`bir
 ## Slack
 The number on Slack's Dock icon (`lsappinfo info -only StatusLabel Slack`) is your unread DMs plus mentions. A bare `•` means only channel unreads and is ignored.
 
+## Menu bar
+The number next to the binoculars is how many want you: agents waiting for your answer plus unread Slack DMs and mentions. Nothing waiting, no number.
+
+## Monthly score
+The header's dots show the month's engineering KPI (the Normalized Score, REV-12239): score = 10 × √work points, work points = 0.5 × item points + counted lines ÷ 450 + 0.5 × merged PRs. Filled dots are the share of the target reached; faint ones what the pace adds by the month end; green, amber or red by whether the month end reaches the target. Hover for the details.
+
+GitHub answers a busy month (every PR with its files) in a minute or more, so `collect.py --score` runs in the background every 30 minutes and writes `~/.agent-widget/score.json`; the regular runs only read it. Set the target and the GitHub org in `config.json` → `score` (`target`, default 230; `org`).
+
+## Minimize
+The header's – hides the tasks and Slack; the header, the footer and the week and month bars stay.
+
 ## Files
 | Path | What |
 |---|---|
