@@ -15,9 +15,9 @@ A desktop-level panel (own app, not WidgetKit: needs hover, glass and animation)
 - Pin in the header (right of the name): pinned floats above every window (green pin), unpinned sits on the desktop.
 
 ## Menu bar
-- Template icon: the minimal binoculars of the app icon; clear lenses while the panel is open, covered ("eyes shut") while it is closed.
+- Template icon: the owl of the app icon; eyes open while the panel is open, shut (pupils closed, the round eyes stay) while it is closed; it blinks while someone wants you.
 - Blink: lids sweep across the lenses and back every 3.5 s while an agent waits for you or Slack has unread.
-- App icon: minimal green binoculars (two rings, a bridge, two eyepiece ticks) on the dark glass tile.
+- App icon: a white owl in simple shapes, two thick ring eyes and a diamond beak, on a black tile.
 - Any click opens a menu: Open / Hide panel, summary lines (tasks · working · waiting, Slack, next meeting, e2e), pin, language (Български / English), about.
 - Header: ? after the pin starts the Explorer tour: one bubble beside the panel per part (title, text, n / N, Back, Next, ✕), the part outlined in the accent colour; the panel comes up above the windows while it runs.
 - Header: ✕ after the ? hides the panel (remembered across restarts). Hidden = no updates; opening refreshes at once.

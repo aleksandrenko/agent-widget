@@ -421,7 +421,7 @@ struct Header: View {
                 .onHover { inside in
                     closeHovered = inside
                     if inside {
-                        Tooltip.shared.show(title: L("Затвори панела", "Close panel"), detail: L("и спира обновяването; отваря се от бинокъла горе", "and stops updates; open it again from the menu bar"))
+                        Tooltip.shared.show(title: L("Затвори панела", "Close panel"), detail: L("и спира обновяването; отваря се от бухала горе", "and stops updates; open it again from the menu bar"))
                     } else {
                         Tooltip.shared.hide()
                     }

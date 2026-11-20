@@ -1,5 +1,5 @@
-// Draws the app icon: a dark glass tile with the panel's corner glow and minimal green binoculars
-// (TheWatcher). Writes App/AppIcon.icns.
+// Draws the app icon: a white owl in simple shapes (two thick ring eyes and a diamond beak) on a black
+// tile. Writes App/AppIcon.icns.
 //
 //     swift tools/icon.swift
 import AppKit
@@ -9,66 +9,50 @@ let iconset = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponen
 try? FileManager.default.removeItem(at: iconset)
 try! FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
 
-func color(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
-    NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255, blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
+// Same owl as App/AgentWidgetApp.swift's menu bar icon: keep the two in step.
+// The owl, in simple shapes: two thick rings for eyes, touching in the middle, and a small diamond beak.
+// Grid units around 0,0 (y down): the eyes are centred at x = ±70, radius 68 with a 28 pupil hole; the beak
+// sits below them. `map` turns grid points into canvas points, `k` is canvas points per unit.
+// `lids`: 0 = eyes open, 1 = shut (the pupil holes close; the eyes stay round).
+func drawOwl(_ map: @escaping (CGFloat, CGFloat) -> NSPoint, k: CGFloat, lids: CGFloat) {
+    let ctx = NSGraphicsContext.current!.cgContext
+    ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+    let R: CGFloat = 68, r: CGFloat = 28
+    for cx: CGFloat in [-70, 70] {
+        let c = map(cx, 0)
+        NSBezierPath(ovalIn: NSRect(x: c.x - R * k, y: c.y - R * k, width: 2 * R * k, height: 2 * R * k)).fill()
+        // The pupil hole; a lid comes down over it from the top, so the eye stays round and only the hole closes.
+        guard lids < 1 else { continue }
+        NSGraphicsContext.saveGraphicsState()
+        let lid = c.y + r * k - 2 * r * k * lids
+        NSRect(x: c.x - r * k, y: c.y - r * k, width: 2 * r * k, height: lid - (c.y - r * k)).clip()
+        ctx.setBlendMode(.clear)
+        NSBezierPath(ovalIn: NSRect(x: c.x - r * k, y: c.y - r * k, width: 2 * r * k, height: 2 * r * k)).fill()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+    ctx.endTransparencyLayer()
+    let beak = NSBezierPath()
+    beak.move(to: map(0, 50)); beak.line(to: map(16, 74)); beak.line(to: map(0, 98)); beak.line(to: map(-16, 74)); beak.close()
+    beak.fill()
 }
 
 func draw(_ s: CGFloat) {
-    // macOS icon grid: the tile is 824/1024 of the canvas, corner radius 185/1024.
     let tile = NSRect(x: s * 100 / 1024, y: s * 100 / 1024, width: s * 824 / 1024, height: s * 824 / 1024)
     let shape = NSBezierPath(roundedRect: tile, xRadius: s * 185 / 1024, yRadius: s * 185 / 1024)
-
     NSGraphicsContext.saveGraphicsState()
     let shadow = NSShadow()
-    shadow.shadowColor = color(0x000000, 0.35)
+    shadow.shadowColor = NSColor(white: 0, alpha: 0.35)
     shadow.shadowOffset = NSSize(width: 0, height: -s * 10 / 1024)
     shadow.shadowBlurRadius = s * 24 / 1024
     shadow.set()
-    color(0x0B1222).setFill()
+    NSColor(white: 0.04, alpha: 1).setFill()
     shape.fill()
     NSGraphicsContext.restoreGraphicsState()
-
-    NSGraphicsContext.saveGraphicsState()
-    shape.addClip()
-    NSGradient(colors: [color(0x16213B), color(0x080D1A)])!.draw(in: tile, angle: -90)
-    // The panel's corner glow: blue in the top-left corner, violet to the right, teal below.
-    for (hex, alpha, x, y, r) in [(0x3B82F6, 0.75, 0.0, 1.0, 0.75), (0x8B5CF6, 0.5, 0.55, 0.95, 0.5), (0x14B8A6, 0.4, 0.05, 0.55, 0.5)] as [(UInt32, CGFloat, CGFloat, CGFloat, CGFloat)] {
-        let center = NSPoint(x: tile.minX + tile.width * x, y: tile.minY + tile.height * y)
-        NSGradient(colors: [color(hex, alpha), color(hex, 0)])!
-            .draw(fromCenter: center, radius: 0, toCenter: center, radius: tile.width * r, options: [])
-    }
-    // A glass rim.
-    color(0xFFFFFF, 0.18).setStroke()
-    shape.lineWidth = s * 6 / 1024
-    shape.stroke()
-    NSGraphicsContext.restoreGraphicsState()
-
-    // Binoculars, the minimal way: two thick rings, a bridge and two eyepiece ticks, in the brand green (#3DDC84).
-    // Drawn on a 64-unit grid (y up), centred on the tile.
-    let u = s * 11.7 / 1024
-    let p = { (x: CGFloat, y: CGFloat) in NSPoint(x: s / 2 + (x - 32) * u, y: s / 2 + (35 - y) * u) }  // the rings carry the weight: centre on them
-    let green = color(0x3DDC84)
-    NSGraphicsContext.saveGraphicsState()
-    let glow = NSShadow()
-    glow.shadowColor = color(0x3DDC84, 0.6)
-    glow.shadowBlurRadius = s * 40 / 1024
-    glow.set()
-    green.setStroke()
-    for cx: CGFloat in [19, 45] {
-        let c = p(cx, 38)
-        let ring = NSBezierPath(ovalIn: NSRect(x: c.x - 11 * u, y: c.y - 11 * u, width: 22 * u, height: 22 * u))
-        ring.lineWidth = 5.5 * u
-        ring.stroke()
-    }
-    let lines = NSBezierPath()
-    lines.move(to: p(30, 34)); lines.line(to: p(34, 34))
-    lines.move(to: p(14, 22)); lines.line(to: p(17, 16))
-    lines.move(to: p(50, 22)); lines.line(to: p(47, 16))
-    lines.lineWidth = 5 * u
-    lines.lineCapStyle = .round
-    lines.stroke()
-    NSGraphicsContext.restoreGraphicsState()
+    let k = tile.width * 0.68 / 276  // the eyes span 276 units across
+    NSColor.white.set()
+    drawOwl({ x, y in NSPoint(x: tile.midX + x * k, y: tile.midY - (y - 15) * k) }, k: k, lids: 0)
 }
+
 
 for size in sizes {
     for scale in [1, 2] where size * scale <= 1024 && !(size == 1024 && scale == 1) || (size == 1024 && scale == 1) {

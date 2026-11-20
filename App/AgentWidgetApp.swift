@@ -157,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Menu bar item
 
-    /// The binoculars in the menu bar: clear lenses while the panel is open, covered while it is closed.
+    /// The owl in the menu bar: eyes open while the panel is open, shut while it is closed.
     /// Any click opens a menu to open or close the panel, with a short summary.
     private func addStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -165,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.action = #selector(statusItemClicked)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         item.button?.toolTip = "TheWatcher"
-        item.button?.imagePosition = .imageLeading  // the number of things waiting for you sits after the binoculars
+        item.button?.imagePosition = .imageLeading  // the number of things waiting for you sits after the owl
         statusItem = item
         snapshotWatch = store.$snapshot.sink { [weak self] _ in
             DispatchQueue.main.async { self?.updateBlink() }
@@ -186,42 +186,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Minimal binoculars, as in the app icon: two rings, a bridge and two eyepiece ticks.
-    /// `lids`: how far the lenses are covered from the top, 0 = clear, 1 = covered. Open panel = clear
-    /// lenses, closed panel = covered ("eyes shut"); a blink sweeps the lids across. A template, so macOS
-    /// tints it like the other menu bar icons.
+    /// The owl, as in the app icon: two thick ring eyes and a diamond beak. `lids`: 0 = eyes open, 1 = shut.
+    /// Open panel = eyes open, closed panel = eyes shut (pupils closed); a blink closes the pupils and opens
+    /// them again. A template, so macOS tints it like the other menu bar icons.
     private static func menuBarIcon(lids: CGFloat) -> NSImage {
-        let image = NSImage(size: NSSize(width: 22, height: 16), flipped: false) { rect in
-            // The icon's 64-unit grid (y down), fitted to the menu bar height.
-            let u: CGFloat = 0.4
-            let p = { (x: CGFloat, y: CGFloat) in NSPoint(x: rect.midX + (x - 32) * u, y: rect.midY + (33 - y) * u) }
+        let image = NSImage(size: NSSize(width: 21, height: 16), flipped: false) { rect in
+            let k: CGFloat = 0.07
             NSColor.black.set()
-            for cx: CGFloat in [19, 45] {
-                let c = p(cx, 38)
-                let lens = NSRect(x: c.x - 11 * u, y: c.y - 11 * u, width: 22 * u, height: 22 * u)
-                let ring = NSBezierPath(ovalIn: lens.insetBy(dx: 0.8, dy: 0.8))
-                ring.lineWidth = 1.6
-                ring.stroke()
-                if lids > 0 {
-                    NSGraphicsContext.saveGraphicsState()
-                    ring.addClip()
-                    NSRect(x: lens.minX, y: lens.maxY - lens.height * lids, width: lens.width, height: lens.height * lids).fill()
-                    NSGraphicsContext.restoreGraphicsState()
-                }
-            }
-            let lines = NSBezierPath()
-            lines.move(to: p(29.5, 34)); lines.line(to: p(34.5, 34))
-            // Short eyepieces leaning in, so it reads as binoculars.
-            lines.move(to: p(15.5, 24)); lines.line(to: p(18.5, 20))
-            lines.move(to: p(48.5, 24)); lines.line(to: p(45.5, 20))
-            lines.lineWidth = 1.6
-            lines.lineCapStyle = .round
-            lines.stroke()
+            drawOwl({ x, y in NSPoint(x: rect.midX + x * k, y: rect.midY - (y - 15) * k) }, k: k, lids: lids)
             return true
         }
         image.isTemplate = true
         image.accessibilityDescription = "TheWatcher"
         return image
+    }
+
+    // The owl, in simple shapes: two thick rings for eyes, touching in the middle, and a small diamond beak.
+    // Grid units around 0,0 (y down): the eyes are centred at x = ±70, radius 68 with a 28 pupil hole; the beak
+    // sits below them. `map` turns grid points into canvas points, `k` is canvas points per unit.
+    // `lids`: 0 = eyes open, 1 = shut (the pupil holes close; the eyes stay round).
+    private static func drawOwl(_ map: @escaping (CGFloat, CGFloat) -> NSPoint, k: CGFloat, lids: CGFloat) {
+        let ctx = NSGraphicsContext.current!.cgContext
+        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+        let R: CGFloat = 68, r: CGFloat = 28
+        for cx: CGFloat in [-70, 70] {
+            let c = map(cx, 0)
+            NSBezierPath(ovalIn: NSRect(x: c.x - R * k, y: c.y - R * k, width: 2 * R * k, height: 2 * R * k)).fill()
+            // The pupil hole; a lid comes down over it from the top, so the eye stays round and only the hole closes.
+            guard lids < 1 else { continue }
+            NSGraphicsContext.saveGraphicsState()
+            let lid = c.y + r * k - 2 * r * k * lids
+            NSRect(x: c.x - r * k, y: c.y - r * k, width: 2 * r * k, height: lid - (c.y - r * k)).clip()
+            ctx.setBlendMode(.clear)
+            NSBezierPath(ovalIn: NSRect(x: c.x - r * k, y: c.y - r * k, width: 2 * r * k, height: 2 * r * k)).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        ctx.endTransparencyLayer()
+        let beak = NSBezierPath()
+        beak.move(to: map(0, 50)); beak.line(to: map(16, 74)); beak.line(to: map(0, 98)); beak.line(to: map(-16, 74)); beak.close()
+        beak.fill()
     }
 
     // MARK: Blink
@@ -243,7 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return agents + slack
     }
 
-    /// While someone wants you, the eye in the menu bar blinks every few seconds and shows how many want you.
+    /// While someone wants you, the owl in the menu bar blinks every few seconds and shows how many want you.
     private func updateBlink() {
         let count = attentionCount
         statusItem?.button?.attributedTitle = NSAttributedString(
@@ -262,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The lids sweep across the lenses and back: shut-and-open while the panel is open,
+    /// The owl's pupils close and open again: shut-and-open while the panel is open,
     /// open-and-shut while it is closed.
     private func blink() {
         let frames: [CGFloat] = [0.35, 0.7, 1, 0.7, 0.35, 0]
